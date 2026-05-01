@@ -20,7 +20,7 @@ In Render:
 | Build command | `npm ci && npm run build` |
 | Start command | `npm start` |
 | Health check path | `/healthz` |
-| Environment variable | `NODE_ENV=production` |
+| Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/` |
 
 The included `render.yaml` can also be used as a Render Blueprint.
 
@@ -88,4 +88,5 @@ After the site is live:
 
 - The Express server already listens on `process.env.PORT` and host `0.0.0.0`, which Render requires for public web services.
 - The app now uses clean browser URLs instead of hash URLs.
+- `VITE_ASSET_BASE=/` makes production assets load correctly from nested clean URLs such as `/brokers/priya-shah-ca`.
 - This is still a client-rendered React app. For stronger SEO later, move the public website and broker directory pages to server-side rendering or prerendered static HTML.
