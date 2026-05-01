@@ -525,8 +525,8 @@ function Assigned({ selected, assignment }: { selected?: QuoteOption; assignment
               <p className="text-sm font-semibold">{selected?.carrierName ?? "Pending"}</p>
             </div>
             <div className="rounded-xl bg-muted p-3">
-              <p className="text-xs text-muted-foreground">Assignment fee</p>
-              <p className="font-mono text-sm font-semibold">{money(assignment?.assignmentFee ?? 0)}</p>
+              <p className="text-xs text-muted-foreground">Next step</p>
+              <p className="text-sm font-semibold">Application handoff</p>
             </div>
           </div>
         </CardContent>
