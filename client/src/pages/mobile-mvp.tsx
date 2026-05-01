@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -761,6 +762,9 @@ function Assigned({ selected, assignment }: { selected?: QuoteOption; assignment
           </div>
         </CardContent>
       </Card>
+      <Button asChild variant="outline" className="h-12 w-full rounded-full" data-testid="button-open-agent-portal">
+        <Link href="/agent">Open agent portal demo</Link>
+      </Button>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Status tracker</CardTitle>
@@ -807,6 +811,8 @@ export default function MobileMvp() {
       (await apiRequest("POST", "/api/assignments", {
         quoteId: selected?.quoteId,
         intake: { ...intake, quoteId: selected?.quoteId ?? "" },
+        selectedQuote: selected,
+        quoteRequest: quote,
         signatureName: signature,
         consentTimestamp: new Date().toISOString(),
       })).json() as Promise<AssignmentResponse>,

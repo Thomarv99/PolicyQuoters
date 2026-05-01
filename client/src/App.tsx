@@ -6,11 +6,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import MobileMvp from "@/pages/mobile-mvp";
+import AgentPortal from "@/pages/agent-portal";
 
 function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={MobileMvp} />
+      <Route path="/agent" component={AgentPortal} />
       <Route component={NotFound} />
     </Switch>
   );

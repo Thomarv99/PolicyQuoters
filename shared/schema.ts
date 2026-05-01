@@ -27,13 +27,34 @@ export const applicationIntakeSchema = z.object({
 export const assignmentRequestSchema = z.object({
   quoteId: z.string(),
   intake: applicationIntakeSchema,
+  selectedQuote: z.custom<QuoteOption>().optional(),
+  quoteRequest: quoteRequestSchema.optional(),
   signatureName: z.string().min(2),
   consentTimestamp: z.string(),
+});
+
+export const agentCaseStatusSchema = z.enum([
+  "available",
+  "assigned",
+  "accepted",
+  "contacted",
+  "application-started",
+  "submitted",
+  "issued",
+  "declined",
+  "not-placed",
+]);
+
+export const agentStatusUpdateSchema = z.object({
+  status: agentCaseStatusSchema,
+  reason: z.string().optional(),
 });
 
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
 export type ApplicationIntake = z.infer<typeof applicationIntakeSchema>;
 export type AssignmentRequest = z.infer<typeof assignmentRequestSchema>;
+export type AgentCaseStatus = z.infer<typeof agentCaseStatusSchema>;
+export type AgentStatusUpdate = z.infer<typeof agentStatusUpdateSchema>;
 
 export type QuoteOption = {
   quoteId: string;
@@ -72,4 +93,47 @@ export type AssignmentResponse = {
   assignmentFee: number;
   status: "assigned";
   nextSteps: string[];
+};
+
+export type AgentCase = {
+  id: string;
+  assignmentId: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    state: string;
+    address: string;
+  };
+  lineType: string;
+  carrierName: string;
+  productName: string;
+  productType: QuoteOption["productType"];
+  faceAmount: number;
+  monthlyPremium: number;
+  annualPremium: number;
+  amBestRating: string;
+  status: AgentCaseStatus;
+  priorityScore: number;
+  assignmentFee: number;
+  feeTier: string;
+  chargeStatus: "pending" | "authorized" | "charged" | "waived";
+  dueBy: string;
+  assignedAgent: AssignmentResponse["assignedAgent"];
+  eligibility: {
+    licensedInState: boolean;
+    appointedWithCarrier: boolean;
+    capacityAvailable: boolean;
+    priorityReason: string;
+  };
+  intake: ApplicationIntake;
+  checklist: Array<{
+    label: string;
+    complete: boolean;
+  }>;
+  auditTrail: Array<{
+    at: string;
+    actor: string;
+    event: string;
+  }>;
 };

@@ -1,8 +1,11 @@
 import type { Express } from "express";
 import type { Server } from "node:http";
 import {
+  agentStatusUpdateSchema,
   assignmentRequestSchema,
   quoteRequestSchema,
+  type AgentCase,
+  type AgentCaseStatus,
   type AssignmentResponse,
   type QuoteOption,
   type QuoteRequest,
@@ -90,6 +93,260 @@ function assignmentFee(annualPremium: number) {
   return Math.max(2_400, Math.round(annualPremium * 0.45));
 }
 
+function feeTier(annualPremium: number) {
+  if (annualPremium < 1_000) return "Starter: 25% of annual premium, $150 minimum";
+  if (annualPremium < 2_000) return "Core: 30% of annual premium, $300 minimum";
+  if (annualPremium < 3_500) return "Growth: 35% of annual premium, $625 minimum";
+  if (annualPremium < 6_000) return "Premium: 40% of annual premium, $1,225 minimum";
+  return "Elite: 45% of annual premium, $2,400 minimum";
+}
+
+const partnerAgent: AssignmentResponse["assignedAgent"] = {
+  name: "Maya Thompson",
+  agency: "PolicyQuoters Licensed Partner Network",
+  licenseStates: ["NY", "FL", "TX", "CA", "PA"],
+  carrierAppointments: ["Banner Life", "Protective", "Pacific Life", "Prudential", "Guardian", "MassMutual"],
+  phone: "(800) 555-0148",
+};
+
+const seedCases: AgentCase[] = [
+  {
+    id: "CASE-1042",
+    assignmentId: "AOR-MVP1042",
+    customer: { name: "Jordan Riley", email: "jordan.riley@example.com", phone: "(212) 555-0198", state: "NY", address: "125 Hudson Street, New York, NY 10013" },
+    lineType: "IUL",
+    carrierName: "Guardian",
+    productName: "Indexed Universal Life",
+    productType: "IUL",
+    faceAmount: 500_000,
+    monthlyPremium: 300.3,
+    annualPremium: 3483.48,
+    amBestRating: "A++",
+    status: "assigned",
+    priorityScore: 94,
+    assignmentFee: assignmentFee(3483.48),
+    feeTier: feeTier(3483.48),
+    chargeStatus: "authorized",
+    dueBy: "Today, 11:30 AM",
+    assignedAgent: partnerAgent,
+    eligibility: {
+      licensedInState: true,
+      appointedWithCarrier: true,
+      capacityAvailable: true,
+      priorityReason: "High premium case, signed consent, agent has Guardian appointment in NY.",
+    },
+    intake: {
+      quoteId: "GUARD-IUL-NY-11",
+      legalName: "Jordan Riley",
+      email: "jordan.riley@example.com",
+      phone: "(212) 555-0198",
+      address: "125 Hudson Street, New York, NY 10013",
+      beneficiary: "Spouse - primary beneficiary",
+      owner: "Insured owns the policy",
+      annualIncome: 185_000,
+      replacement: false,
+      notes: "Customer asked about cash value and wants a strong A++ carrier.",
+    },
+    checklist: [
+      { label: "Review selected quote snapshot", complete: true },
+      { label: "Call customer within SLA", complete: false },
+      { label: "Open carrier eApp or FireLight packet", complete: false },
+      { label: "Submit application to carrier", complete: false },
+    ],
+    auditTrail: [
+      { at: "8:12 AM", actor: "PolicyQuoters", event: "Customer signed consumer packet." },
+      { at: "8:13 AM", actor: "Assignment Engine", event: "Matched to Maya Thompson based on NY license and Guardian appointment." },
+    ],
+  },
+  {
+    id: "CASE-1041",
+    assignmentId: "AOR-MVP1041",
+    customer: { name: "Alicia Morgan", email: "alicia.morgan@example.com", phone: "(813) 555-0108", state: "FL", address: "84 Bayshore Drive, Tampa, FL 33606" },
+    lineType: "Mortgage Protection",
+    carrierName: "Protective",
+    productName: "25-Year Mortgage Protection Term",
+    productType: "Mortgage Protection",
+    faceAmount: 425_000,
+    monthlyPremium: 68.42,
+    annualPremium: 793.67,
+    amBestRating: "A+",
+    status: "accepted",
+    priorityScore: 88,
+    assignmentFee: assignmentFee(793.67),
+    feeTier: feeTier(793.67),
+    chargeStatus: "pending",
+    dueBy: "Today, 1:00 PM",
+    assignedAgent: partnerAgent,
+    eligibility: {
+      licensedInState: true,
+      appointedWithCarrier: true,
+      capacityAvailable: true,
+      priorityReason: "Mortgage protection request with signed packet and Protective appointment available.",
+    },
+    intake: {
+      quoteId: "PROTE-MortgageProtection-FL-2",
+      legalName: "Alicia Morgan",
+      email: "alicia.morgan@example.com",
+      phone: "(813) 555-0108",
+      address: "84 Bayshore Drive, Tampa, FL 33606",
+      beneficiary: "Spouse",
+      owner: "Insured owns the policy",
+      annualIncome: 142_000,
+      replacement: false,
+      notes: "Customer wants coverage aligned to remaining mortgage term.",
+    },
+    checklist: [
+      { label: "Review selected quote snapshot", complete: true },
+      { label: "Call customer within SLA", complete: true },
+      { label: "Open carrier eApp or FireLight packet", complete: false },
+      { label: "Submit application to carrier", complete: false },
+    ],
+    auditTrail: [
+      { at: "7:48 AM", actor: "PolicyQuoters", event: "Customer signed consumer packet." },
+      { at: "7:52 AM", actor: "Maya Thompson", event: "Accepted assignment." },
+    ],
+  },
+  {
+    id: "CASE-1040",
+    assignmentId: "AOR-MVP1040",
+    customer: { name: "Marcus Chen", email: "marcus.chen@example.com", phone: "(512) 555-0161", state: "TX", address: "201 Congress Avenue, Austin, TX 78701" },
+    lineType: "Term Life",
+    carrierName: "Banner Life",
+    productName: "20-Year Level Term Life",
+    productType: "Term",
+    faceAmount: 1_000_000,
+    monthlyPremium: 73.86,
+    annualPremium: 856.78,
+    amBestRating: "A+",
+    status: "contacted",
+    priorityScore: 82,
+    assignmentFee: assignmentFee(856.78),
+    feeTier: feeTier(856.78),
+    chargeStatus: "pending",
+    dueBy: "Tomorrow, 9:00 AM",
+    assignedAgent: partnerAgent,
+    eligibility: {
+      licensedInState: true,
+      appointedWithCarrier: true,
+      capacityAvailable: true,
+      priorityReason: "Large face amount, Banner appointment active, customer ready for eApp handoff.",
+    },
+    intake: {
+      quoteId: "BANNE-Term-TX-1",
+      legalName: "Marcus Chen",
+      email: "marcus.chen@example.com",
+      phone: "(512) 555-0161",
+      address: "201 Congress Avenue, Austin, TX 78701",
+      beneficiary: "Spouse primary, children contingent",
+      owner: "Insured owns the policy",
+      annualIncome: 260_000,
+      replacement: false,
+      notes: "Customer prefers low-cost term and fast underwriting.",
+    },
+    checklist: [
+      { label: "Review selected quote snapshot", complete: true },
+      { label: "Call customer within SLA", complete: true },
+      { label: "Open carrier eApp or FireLight packet", complete: true },
+      { label: "Submit application to carrier", complete: false },
+    ],
+    auditTrail: [
+      { at: "Yesterday", actor: "PolicyQuoters", event: "Customer signed consumer packet." },
+      { at: "Yesterday", actor: "Maya Thompson", event: "Marked customer contacted." },
+    ],
+  },
+];
+
+const agentCases: AgentCase[] = [...seedCases];
+
+function statusEvent(status: AgentCaseStatus) {
+  const labels: Record<AgentCaseStatus, string> = {
+    available: "Returned to available queue.",
+    assigned: "Assignment reset to assigned.",
+    accepted: "Accepted assignment.",
+    contacted: "Marked customer contacted.",
+    "application-started": "Started carrier application handoff.",
+    submitted: "Submitted application to carrier.",
+    issued: "Marked policy issued.",
+    declined: "Declined assignment.",
+    "not-placed": "Marked policy not placed.",
+  };
+  return labels[status];
+}
+
+function checklistForStatus(status: AgentCaseStatus, checklist: AgentCase["checklist"]) {
+  return checklist.map((item, index) => ({
+    ...item,
+    complete:
+      item.complete ||
+      (status === "accepted" && index <= 0) ||
+      (status === "contacted" && index <= 1) ||
+      (status === "application-started" && index <= 2) ||
+      (["submitted", "issued"].includes(status) && index <= 3),
+  }));
+}
+
+function lineLabel(lineType?: QuoteRequest["lineType"], productType?: QuoteOption["productType"]) {
+  const labels: Partial<Record<QuoteRequest["lineType"], string>> = {
+    "term-life": "Life Insurance",
+    iul: "IUL",
+    "mortgage-protection": "Mortgage Protection",
+    "whole-life": "Whole Life",
+    "universal-life": "Universal Life",
+    "final-expense": "Final Expense",
+    annuities: "Annuities",
+  };
+  return lineType ? labels[lineType] ?? productType ?? "Life Insurance" : productType ?? "Life Insurance";
+}
+
+function caseFromAssignment(assignment: AssignmentResponse, request: { intake: AgentCase["intake"]; selectedQuote?: QuoteOption; quoteRequest?: QuoteRequest }): AgentCase {
+  const selectedQuote = request.selectedQuote;
+  const annualPremium = selectedQuote?.annualPremium ?? 1650;
+  const state = request.quoteRequest?.state ?? request.intake.quoteId.split("-").at(-2) ?? request.intake.address.match(/\b[A-Z]{2}\b/)?.[0] ?? "NY";
+  return {
+    id: `CASE-${Math.floor(1043 + agentCases.length)}`,
+    assignmentId: assignment.assignmentId,
+    customer: {
+      name: request.intake.legalName,
+      email: request.intake.email,
+      phone: request.intake.phone,
+      state,
+      address: request.intake.address,
+    },
+    lineType: lineLabel(request.quoteRequest?.lineType, selectedQuote?.productType),
+    carrierName: selectedQuote?.carrierName ?? "Selected carrier",
+    productName: selectedQuote?.productName ?? "Selected product",
+    productType: selectedQuote?.productType ?? "Term",
+    faceAmount: request.quoteRequest?.faceAmount ?? 500_000,
+    monthlyPremium: selectedQuote?.monthlyPremium ?? 142.25,
+    annualPremium,
+    amBestRating: selectedQuote?.amBestRating ?? "A+",
+    status: "assigned",
+    priorityScore: selectedQuote ? Math.min(99, selectedQuote.fitScore + 4) : 86,
+    assignmentFee: assignment.assignmentFee,
+    feeTier: feeTier(annualPremium),
+    chargeStatus: "authorized",
+    dueBy: "Today, 2:00 PM",
+    assignedAgent: assignment.assignedAgent,
+    eligibility: {
+      licensedInState: true,
+      appointedWithCarrier: true,
+      capacityAvailable: true,
+      priorityReason: "Customer selected a quote, completed intake, accepted disclosures, and signed the packet.",
+    },
+    intake: request.intake,
+    checklist: [
+      { label: "Review selected quote snapshot", complete: true },
+      { label: "Call customer within SLA", complete: false },
+      { label: "Open carrier eApp or FireLight packet", complete: false },
+      { label: "Submit application to carrier", complete: false },
+    ],
+    auditTrail: [
+      { at: "Just now", actor: "PolicyQuoters", event: "Customer signed consumer packet." },
+      { at: "Just now", actor: "Assignment Engine", event: `Assigned to ${assignment.assignedAgent.name}.` },
+    ],
+  };
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.post("/api/quotes", (req, res) => {
     const parsed = quoteRequestSchema.safeParse(req.body);
@@ -121,16 +378,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Invalid assignment request", issues: parsed.error.issues });
     }
 
-    const estimatedAnnualPremium = 1_650;
+    const estimatedAnnualPremium = parsed.data.selectedQuote?.annualPremium ?? 1_650;
     const response: AssignmentResponse = {
       assignmentId: `AOR-${Date.now().toString(36).toUpperCase()}`,
-      assignedAgent: {
-        name: "Maya Thompson",
-        agency: "PolicyQuoters Licensed Partner Network",
-        licenseStates: [parsed.data.intake.quoteId.includes("-NY-") ? "NY" : "FL", "TX", "CA", "PA"],
-        carrierAppointments: ["Banner Life", "Protective", "Pacific Life", "Prudential"],
-        phone: "(800) 555-0148",
-      },
+      assignedAgent: partnerAgent,
       assignmentFee: assignmentFee(estimatedAnnualPremium),
       status: "assigned",
       nextSteps: [
@@ -140,7 +391,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ],
     };
 
+    agentCases.unshift(caseFromAssignment(response, { intake: parsed.data.intake, selectedQuote: parsed.data.selectedQuote, quoteRequest: parsed.data.quoteRequest }));
+
     return res.json(response);
+  });
+
+  app.get("/api/agent/cases", (_req, res) => {
+    return res.json(agentCases);
+  });
+
+  app.patch("/api/agent/cases/:id/status", (req, res) => {
+    const parsed = agentStatusUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid status update", issues: parsed.error.issues });
+    }
+
+    const target = agentCases.find((agentCase) => agentCase.id === req.params.id);
+    if (!target) {
+      return res.status(404).json({ message: "Case not found" });
+    }
+
+    target.status = parsed.data.status;
+    target.checklist = checklistForStatus(parsed.data.status, target.checklist);
+    target.auditTrail.unshift({
+      at: "Just now",
+      actor: parsed.data.status === "declined" ? "Agent" : target.assignedAgent.name,
+      event: parsed.data.reason ? `${statusEvent(parsed.data.status)} Reason: ${parsed.data.reason}` : statusEvent(parsed.data.status),
+    });
+
+    if (parsed.data.status === "issued") target.chargeStatus = "charged";
+    if (parsed.data.status === "declined" || parsed.data.status === "not-placed") target.chargeStatus = "waived";
+
+    return res.json(target);
   });
 
   return httpServer;
