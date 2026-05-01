@@ -103,7 +103,7 @@ const brokers = [
     reviews: 139,
     years: 9,
     phone: "(866) 555-0136",
-    bio: "Elliot focuses on straightforward family protection cases, mortgage protection, and fast application handoffs.",
+    bio: "Elliot focuses on straightforward family protection, mortgage protection, and final expense coverage for shoppers who want clear next steps.",
   },
   {
     slug: "priya-shah-ca",
@@ -209,7 +209,7 @@ function Logo() {
       </svg>
       <div>
         <p className="font-semibold leading-none">PolicyQuoters</p>
-        <p className="text-xs text-muted-foreground">Insurance shopping platform</p>
+        <p className="text-xs text-muted-foreground">Compare coverage with confidence</p>
       </div>
     </Link>
   );
@@ -228,7 +228,7 @@ function WebsiteHeader({ onQuote }: { onQuote: (intent?: QuoteIntent) => void })
             <Link href="/directory">Find brokers</Link>
           </Button>
           <Button asChild variant="ghost" className="rounded-full" data-testid="link-nav-app">
-            <Link href="/app">Open PWA</Link>
+            <Link href="/app">Continue quote</Link>
           </Button>
           <Button asChild variant="outline" className="rounded-full" data-testid="link-nav-login">
             <Link href="/login/consumer">Login</Link>
@@ -253,11 +253,11 @@ function WebsiteFooter() {
           </p>
         </div>
         <div>
-          <p className="font-semibold">Platform</p>
+          <p className="font-semibold">Shop insurance</p>
           <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
             <Link href="/quotes">Get life insurance quotes</Link>
             <Link href="/directory">Broker directory</Link>
-            <Link href="/app">Mobile PWA</Link>
+            <Link href="/app">Continue a quote</Link>
           </div>
         </div>
         <div>
@@ -295,11 +295,11 @@ function QuoteModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <Badge className="rounded-full" variant="secondary">
-                Quote handoff
+                Quick quote start
               </Badge>
               <h2 className="mt-3 text-xl font-semibold tracking-[-0.03em]">Start your {selectedLine.title.toLowerCase()}</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {brokerName ? `${brokerName} can be matched after you compare quotes and select an option.` : "Compare options first, then complete the mobile-friendly quote flow."}
+                {brokerName ? `Compare options first, then choose whether you want help from ${brokerName}.` : "Answer a few basics to start comparing coverage options."}
               </p>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close quote modal" data-testid="button-close-quote-modal">
@@ -325,7 +325,7 @@ function QuoteModal({
             </div>
           </div>
           <div className="mt-5 rounded-2xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
-            In production this modal should create a quote-intent record, attribute the traffic source and broker page, and open the same shared quote session in the website, PWA, or native mobile app.
+            Your information helps us personalize quotes by location, coverage amount, and basic eligibility. You can review options before choosing what to do next.
           </div>
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" className="rounded-full" onClick={onClose} data-testid="button-modal-cancel">
@@ -388,13 +388,13 @@ function HeroPanel({ onQuote }: { onQuote: (intent?: QuoteIntent) => void }) {
     <section className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:py-16">
       <div className="flex flex-col justify-center">
         <Badge className="max-w-full whitespace-normal rounded-full leading-5" variant="secondary">
-          Life insurance quotes, applications, and licensed broker assignment
+          Life insurance quotes made easier
         </Badge>
         <h1 className="mt-5 max-w-3xl text-4xl font-bold tracking-[-0.06em] sm:text-5xl">
           Compare life insurance quotes and connect with licensed brokers.
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-          PolicyQuoters brings quote shopping, policy application intake, e-sign handoff, and agent assignment into one connected insurance shopping platform.
+          Compare coverage options, learn what each policy type is designed for, and get help from licensed insurance brokers when you are ready.
         </p>
         <div className="mt-7 flex flex-col gap-3 sm:flex-row">
           <Button size="lg" className="w-full rounded-full sm:w-auto" onClick={() => onQuote("life-insurance")} data-testid="button-hero-get-quote">
@@ -407,9 +407,9 @@ function HeroPanel({ onQuote }: { onQuote: (intent?: QuoteIntent) => void }) {
         </div>
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           {[
-            ["Quote comparison", "Shop multiple products in one flow."],
-            ["Broker directory", "Match with licensed brokers by state and carrier."],
-            ["Shared PWA", "Continue the quote flow on web, PWA, or mobile."],
+            ["Compare options", "Review multiple types of coverage in one place."],
+            ["Find licensed help", "Browse brokers by state, specialty, and carrier."],
+            ["Continue anytime", "Start on the website and keep going from your phone."],
           ].map(([title, copy]) => (
             <div key={title} className="rounded-2xl border border-border bg-card/80 p-4">
               <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -424,18 +424,18 @@ function HeroPanel({ onQuote }: { onQuote: (intent?: QuoteIntent) => void }) {
           <div className="rounded-3xl border border-border bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold">Live quote journey</p>
-                <p className="text-xs text-muted-foreground">Website → PWA → Agent assignment</p>
+                <p className="text-sm font-semibold">How shopping works</p>
+                <p className="text-xs text-muted-foreground">Compare, choose, and get help</p>
               </div>
-              <Badge className="rounded-full">SEO entry</Badge>
+              <Badge className="rounded-full">Simple steps</Badge>
             </div>
             <div className="mt-5 space-y-3">
               {[
-                ["1", "Search user lands on a quote or broker page"],
-                ["2", "Quote modal captures intent and source"],
-                ["3", "Shop carriers in the connected quote app"],
-                ["4", "Application and e-sign handoff"],
-                ["5", "Assign completed policy selection to broker"],
+                ["1", "Tell us what kind of coverage you want"],
+                ["2", "Compare available policy options"],
+                ["3", "Choose the quote that fits your needs"],
+                ["4", "Complete the application steps"],
+                ["5", "Get connected with licensed support"],
               ].map(([step, text]) => (
                 <div key={step} className="flex items-center gap-3 rounded-2xl bg-muted p-3 text-sm">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground">{step}</span>
@@ -458,9 +458,9 @@ function LinesSection({ onQuote }: { onQuote: (intent?: QuoteIntent) => void }) 
           <Badge variant="outline" className="rounded-full">
             Quote categories
           </Badge>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">Insurance pages built for search intent</h2>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">Shop the coverage that fits your goal</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Each category can become a dedicated SEO page with educational content, FAQs, structured data, and a quote conversion path.
+            Learn the difference between common life insurance options and start a quote when you know what you want to compare.
           </p>
         </div>
         <Button asChild variant="outline" className="rounded-full" data-testid="button-view-quotes-page">
@@ -494,9 +494,9 @@ function DirectoryPreview({ onQuote }: { onQuote: (intent?: QuoteIntent, brokerN
             <Badge variant="outline" className="rounded-full">
               Broker directory
             </Badge>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">SEO-rich licensed insurance broker listings</h2>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">Find licensed brokers by state and specialty</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Broker profile pages can target state, city, carrier, and product keywords while converting search users into quote shoppers.
+              Browse experienced insurance professionals, see the products they focus on, and start a quote from any broker profile.
             </p>
           </div>
           <Button asChild className="rounded-full" data-testid="button-directory-preview-link">
@@ -572,11 +572,11 @@ export function PublicHome() {
         <Card className="bg-primary text-primary-foreground">
           <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold tracking-[-0.04em]">Continue into the connected quote PWA.</h2>
-              <p className="mt-2 text-sm leading-6 opacity-85">The same quote journey can power the public website, progressive web app, and future native mobile apps.</p>
+              <h2 className="text-2xl font-semibold tracking-[-0.04em]">Ready to compare coverage?</h2>
+              <p className="mt-2 text-sm leading-6 opacity-85">Start with a few basic details, review available options, and continue when it is convenient for you.</p>
             </div>
             <Button asChild variant="secondary" className="rounded-full" data-testid="button-open-pwa-cta">
-              <Link href="/app">Open quote app</Link>
+              <Link href="/app">Continue quote</Link>
             </Button>
           </CardContent>
         </Card>
@@ -618,7 +618,7 @@ export function QuotesPage() {
           </Badge>
           <h1 className="mt-4 text-4xl font-bold tracking-[-0.06em]">Get life insurance quotes online.</h1>
           <p className="mt-3 max-w-3xl text-base leading-7 text-muted-foreground">
-            Choose a line of insurance, compare options, and continue into the PolicyQuoters PWA to complete the quote and application workflow.
+            Choose a line of insurance, compare coverage options, and continue through a mobile-friendly quote experience.
           </p>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -630,8 +630,8 @@ export function QuotesPage() {
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{line.description}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Badge variant="secondary" className="rounded-full">{line.keyword}</Badge>
-                  <Badge variant="secondary" className="rounded-full">Broker matching</Badge>
-                  <Badge variant="secondary" className="rounded-full">Mobile quote flow</Badge>
+                  <Badge variant="secondary" className="rounded-full">Licensed broker help</Badge>
+                  <Badge variant="secondary" className="rounded-full">Mobile-friendly</Badge>
                 </div>
                 <Button className="mt-5 rounded-full" onClick={() => modal.openQuote(line.id)} data-testid={`button-quotes-page-${line.id}`}>
                   Start {line.title}
@@ -762,7 +762,7 @@ export function BrokerProfilePage() {
             <CardContent className="space-y-4 p-5">
               <CardTitle className="text-base">Start with {broker.name}</CardTitle>
               <p className="text-sm leading-6 text-muted-foreground">
-                Compare quotes first, then PolicyQuoters can hand the completed policy selection to a licensed broker.
+                Compare quotes first, then choose whether you want licensed help reviewing next steps.
               </p>
               <Button className="w-full rounded-full" onClick={() => modal.openQuote("life-insurance", broker.name)} data-testid="button-profile-get-quote">
                 Get a quote
@@ -800,7 +800,7 @@ export function LoginPage({ role }: { role: LoginRole }) {
   const roleCopy: Record<LoginRole, { title: string; description: string; destination: string; cta: string }> = {
     consumer: {
       title: "Consumer login",
-      description: "Return to saved quotes, applications, disclosures, and policy assignment status.",
+      description: "Return to saved quotes, applications, documents, and coverage progress.",
       destination: "/app",
       cta: "Open quote dashboard",
     },
@@ -846,7 +846,7 @@ export function LoginPage({ role }: { role: LoginRole }) {
               <Input type="password" placeholder="••••••••" data-testid={`input-login-password-${role}`} />
             </div>
             <div className="rounded-2xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
-              Production login should use authenticated accounts, role permissions, MFA for agents/admins, and shared quote sessions across website, PWA, and mobile apps.
+              This demo login opens the right dashboard. A production account would protect saved quotes, documents, and account activity.
             </div>
             <Button asChild className="w-full rounded-full" data-testid={`button-login-${role}`}>
               <Link href={copy.destination}>
