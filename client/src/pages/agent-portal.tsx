@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  DollarSign,
   FileSignature,
   Handshake,
   Mail,
@@ -226,10 +227,16 @@ function QueueCard({
               <p className="mt-1 text-xs leading-5 text-muted-foreground">{agentCase.dueBy}</p>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-xl bg-background p-2">
               <p className="text-muted-foreground">Annual premium</p>
               <p className="mt-1 font-mono font-semibold">{premium(agentCase.annualPremium)}</p>
+            </div>
+            <div className="rounded-xl bg-background p-2">
+              <p className="text-muted-foreground">Assignment fee</p>
+              <p className="mt-1 font-mono font-semibold" data-testid={`text-card-assignment-fee-${agentCase.id}`}>
+                {money(agentCase.assignmentFee)}
+              </p>
             </div>
             <div className="rounded-xl bg-background p-2">
               <p className="text-muted-foreground">AM Best</p>
@@ -307,6 +314,9 @@ function NextStepPanel({
                 <Badge variant="outline" className="rounded-full">
                   {agentCase.id}
                 </Badge>
+                <Badge variant="secondary" className="rounded-full" data-testid="badge-assignment-fee">
+                  Assignment fee {money(agentCase.assignmentFee)}
+                </Badge>
               </div>
               <h2 className="mt-3 text-xl font-semibold tracking-[-0.03em]" data-testid="text-next-action">
                 Next step: {action.headline}
@@ -358,6 +368,7 @@ function AssignmentSummary({ agentCase }: { agentCase: AgentCase }) {
           ["Carrier", agentCase.carrierName],
           ["Product", agentCase.productName],
           ["Face amount", money(agentCase.faceAmount)],
+          ["Assignment fee", money(agentCase.assignmentFee)],
           ["Due", agentCase.dueBy],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl bg-muted p-3">
@@ -365,6 +376,17 @@ function AssignmentSummary({ agentCase }: { agentCase: AgentCase }) {
             <p className="mt-1 text-sm font-semibold">{value}</p>
           </div>
         ))}
+        <div className="rounded-xl bg-primary/10 p-3 sm:col-span-2">
+          <div className="flex items-start gap-2">
+            <DollarSign className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Agent-facing fee</p>
+              <p className="mt-2 text-sm leading-6">
+                PolicyQuoters collects this assignment fee from the agent for the completed customer handoff. It is not shown in the consumer shopping flow.
+              </p>
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
