@@ -72,6 +72,15 @@ export const agentProfileSchema = z.object({
   feeAuthorizationAccepted: z.boolean(),
 });
 
+export const adminAssignAgentSchema = z.object({
+  agentId: z.string().min(2),
+  reason: z.string().optional(),
+});
+
+export const adminCaseActionSchema = z.object({
+  reason: z.string().optional(),
+});
+
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
 export type ApplicationIntake = z.infer<typeof applicationIntakeSchema>;
 export type AssignmentRequest = z.infer<typeof assignmentRequestSchema>;
@@ -79,6 +88,8 @@ export type AgentCaseStatus = z.infer<typeof agentCaseStatusSchema>;
 export type AgentStatusUpdate = z.infer<typeof agentStatusUpdateSchema>;
 export type AgentProductLine = z.infer<typeof agentProductLineSchema>;
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
+export type AdminAssignAgent = z.infer<typeof adminAssignAgentSchema>;
+export type AdminCaseAction = z.infer<typeof adminCaseActionSchema>;
 
 export type AgentProfileReadiness = {
   ready: boolean;
@@ -167,4 +178,50 @@ export type AgentCase = {
     actor: string;
     event: string;
   }>;
+};
+
+export type MatchSignal = {
+  label: string;
+  pass: boolean;
+  detail: string;
+};
+
+export type RoutingCandidate = {
+  agentId: string;
+  name: string;
+  agency: string;
+  phone: string;
+  score: number;
+  eligible: boolean;
+  activeAssignments: number;
+  weeklyCapacity: number;
+  performanceScore: number;
+  declineRate: number;
+  readinessReady: boolean;
+  paymentVerified: boolean;
+  feeAuthorized: boolean;
+  explanation: string;
+  blockers: string[];
+  signals: MatchSignal[];
+};
+
+export type AdminAssignmentCase = AgentCase & {
+  routing: {
+    requiredProductLine: AgentProductLine;
+    recommendedAgentId?: string;
+    recommendedScore: number;
+    expiresInMinutes: number;
+    attempts: number;
+    candidates: RoutingCandidate[];
+  };
+};
+
+export type AdminAssignmentDashboard = {
+  cases: AdminAssignmentCase[];
+  metrics: {
+    waitingForAssignment: number;
+    needsReroute: number;
+    activeAssignments: number;
+    potentialFees: number;
+  };
 };

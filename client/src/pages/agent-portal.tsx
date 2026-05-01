@@ -640,6 +640,9 @@ export default function AgentPortal() {
             <Badge variant="secondary" className="rounded-full">
               Demo workspace
             </Badge>
+            <Button asChild variant="outline" className="rounded-full" data-testid="button-open-admin-console">
+              <Link href="/admin">Admin console</Link>
+            </Button>
             <Button asChild variant="outline" className="rounded-full" data-testid="button-open-onboarding">
               <Link href="/agent/onboarding">Agent setup</Link>
             </Button>

@@ -1,15 +1,21 @@
 import type { Express } from "express";
 import type { Server } from "node:http";
 import {
+  adminAssignAgentSchema,
+  adminCaseActionSchema,
   agentProfileSchema,
   agentStatusUpdateSchema,
   assignmentRequestSchema,
   quoteRequestSchema,
   type AgentCase,
+  type AgentProductLine,
   type AgentProfile,
   type AgentProfileReadiness,
   type AgentCaseStatus,
+  type AdminAssignmentCase,
+  type AdminAssignmentDashboard,
   type AssignmentResponse,
+  type RoutingCandidate,
   type QuoteOption,
   type QuoteRequest,
   type QuoteResponse,
@@ -132,6 +138,101 @@ let agentProfile: AgentProfile = {
   feeAuthorizationAccepted: false,
 };
 
+type AgentDirectoryProfile = AgentProfile & {
+  id: string;
+  performanceScore: number;
+  declineRate: number;
+  activeAssignments: number;
+};
+
+function profileFromAgent(agent: AgentDirectoryProfile): AssignmentResponse["assignedAgent"] {
+  return {
+    name: agent.name,
+    agency: agent.agency,
+    licenseStates: agent.licenseStates,
+    carrierAppointments: agent.carrierAppointments,
+    phone: agent.phone,
+  };
+}
+
+function productLineFromCase(agentCase: Pick<AgentCase, "lineType" | "productType">): AgentProductLine {
+  const normalized = `${agentCase.lineType} ${agentCase.productType}`.toLowerCase();
+  if (normalized.includes("mortgage")) return "mortgage-protection";
+  if (normalized.includes("iul") || normalized.includes("indexed")) return "iul";
+  if (normalized.includes("whole")) return "whole-life";
+  if (normalized.includes("universal")) return "universal-life";
+  if (normalized.includes("final")) return "final-expense";
+  if (normalized.includes("annuity")) return "annuities";
+  return "term-life";
+}
+
+let agentDirectory: AgentDirectoryProfile[] = [
+  {
+    id: "AGENT-MAYA",
+    ...agentProfile,
+    performanceScore: 96,
+    declineRate: 0.06,
+    activeAssignments: 3,
+  },
+  {
+    id: "AGENT-ELLIOT",
+    name: "Elliot Ramirez",
+    agency: "Summit Life Partners",
+    npn: "27189304",
+    email: "elliot.ramirez@example.com",
+    phone: "(866) 555-0136",
+    licenseStates: ["FL", "GA", "NC", "TX"],
+    carrierAppointments: ["Protective", "Banner Life", "Nationwide", "Lincoln Financial", "Transamerica"],
+    productLines: ["term-life", "mortgage-protection", "final-expense"],
+    weeklyCapacity: 18,
+    acceptsInstantAssignments: true,
+    paymentMethod: { brand: "Mastercard", last4: "1881", status: "verified" },
+    agreementAccepted: true,
+    feeAuthorizationAccepted: true,
+    performanceScore: 91,
+    declineRate: 0.04,
+    activeAssignments: 5,
+  },
+  {
+    id: "AGENT-PRIYA",
+    name: "Priya Shah",
+    agency: "Evergreen Advanced Markets",
+    npn: "39024817",
+    email: "priya.shah@example.com",
+    phone: "(877) 555-0184",
+    licenseStates: ["NY", "NJ", "PA", "CA", "IL"],
+    carrierAppointments: ["Guardian", "MassMutual", "Pacific Life", "Prudential", "Nationwide"],
+    productLines: ["iul", "whole-life", "universal-life", "annuities"],
+    weeklyCapacity: 10,
+    acceptsInstantAssignments: true,
+    paymentMethod: { brand: "Amex", last4: "1005", status: "verified" },
+    agreementAccepted: true,
+    feeAuthorizationAccepted: true,
+    performanceScore: 98,
+    declineRate: 0.02,
+    activeAssignments: 4,
+  },
+  {
+    id: "AGENT-DANIEL",
+    name: "Daniel Brooks",
+    agency: "Lakeside Family Insurance",
+    npn: "61820394",
+    email: "daniel.brooks@example.com",
+    phone: "(855) 555-0172",
+    licenseStates: ["TX", "AZ", "OH", "MI"],
+    carrierAppointments: ["Banner Life", "Protective", "North American", "Mutual of Omaha"],
+    productLines: ["term-life", "final-expense", "mortgage-protection"],
+    weeklyCapacity: 8,
+    acceptsInstantAssignments: false,
+    paymentMethod: { brand: "Visa", last4: "7729", status: "verified" },
+    agreementAccepted: true,
+    feeAuthorizationAccepted: false,
+    performanceScore: 84,
+    declineRate: 0.14,
+    activeAssignments: 7,
+  },
+];
+
 function profileReadiness(profile: AgentProfile): AgentProfileReadiness {
   const missing: string[] = [];
   if (!profile.licenseStates.length) missing.push("Add at least one licensed state.");
@@ -151,6 +252,150 @@ function profileReadiness(profile: AgentProfile): AgentProfileReadiness {
     missing,
     profile,
   };
+}
+
+function currentPrimaryAgent() {
+  return agentDirectory.find((agent) => agent.id === "AGENT-MAYA");
+}
+
+function syncPrimaryAgentProfile() {
+  const current = currentPrimaryAgent();
+  if (!current) return;
+  Object.assign(current, agentProfile);
+  partnerAgent.name = agentProfile.name;
+  partnerAgent.agency = agentProfile.agency;
+  partnerAgent.licenseStates = agentProfile.licenseStates;
+  partnerAgent.carrierAppointments = agentProfile.carrierAppointments;
+  partnerAgent.phone = agentProfile.phone;
+}
+
+function candidateForCase(agent: AgentDirectoryProfile, agentCase: AgentCase): RoutingCandidate {
+  const requiredProductLine = productLineFromCase(agentCase);
+  const readiness = profileReadiness(agent);
+  const signals = [
+    {
+      label: "Licensed in customer state",
+      pass: agent.licenseStates.includes(agentCase.customer.state),
+      detail: `${agentCase.customer.state} ${agent.licenseStates.includes(agentCase.customer.state) ? "covered" : "not covered"}`,
+    },
+    {
+      label: "Carrier appointed",
+      pass: agent.carrierAppointments.includes(agentCase.carrierName),
+      detail: agent.carrierAppointments.includes(agentCase.carrierName) ? `${agentCase.carrierName} appointment active` : `No ${agentCase.carrierName} appointment`,
+    },
+    {
+      label: "Product line accepted",
+      pass: agent.productLines.includes(requiredProductLine),
+      detail: requiredProductLine.replaceAll("-", " "),
+    },
+    {
+      label: "Capacity available",
+      pass: agent.activeAssignments < agent.weeklyCapacity,
+      detail: `${agent.activeAssignments}/${agent.weeklyCapacity} active assignments`,
+    },
+    {
+      label: "Payment verified",
+      pass: agent.paymentMethod.status === "verified",
+      detail: agent.paymentMethod.status === "verified" ? `${agent.paymentMethod.brand} ending ${agent.paymentMethod.last4}` : "No verified card",
+    },
+    {
+      label: "Fee authorization",
+      pass: agent.feeAuthorizationAccepted,
+      detail: agent.feeAuthorizationAccepted ? "Accepted" : "Not accepted",
+    },
+    {
+      label: "Instant assignments",
+      pass: agent.acceptsInstantAssignments,
+      detail: agent.acceptsInstantAssignments ? "Enabled" : "Off",
+    },
+  ];
+  const blockers = signals.filter((signal) => !signal.pass).map((signal) => signal.label);
+  const eligible = blockers.length === 0;
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        signals.filter((signal) => signal.pass).length * 9 +
+          agent.performanceScore * 0.32 +
+          Math.max(0, agent.weeklyCapacity - agent.activeAssignments) * 1.4 -
+          agent.declineRate * 42 +
+          readiness.score * 0.12,
+      ),
+    ),
+  );
+
+  return {
+    agentId: agent.id,
+    name: agent.name,
+    agency: agent.agency,
+    phone: agent.phone,
+    score,
+    eligible,
+    activeAssignments: agent.activeAssignments,
+    weeklyCapacity: agent.weeklyCapacity,
+    performanceScore: agent.performanceScore,
+    declineRate: agent.declineRate,
+    readinessReady: readiness.ready,
+    paymentVerified: agent.paymentMethod.status === "verified",
+    feeAuthorized: agent.feeAuthorizationAccepted,
+    explanation: eligible
+      ? `${agent.name} is eligible: licensed, appointed, payment-ready, and below capacity.`
+      : `${agent.name} is blocked by ${blockers.slice(0, 2).join(" and ")}${blockers.length > 2 ? " plus other checks" : ""}.`,
+    blockers,
+    signals,
+  };
+}
+
+function adminCase(agentCase: AgentCase): AdminAssignmentCase {
+  const candidates = agentDirectory.map((agent) => candidateForCase(agent, agentCase)).sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score);
+  const recommended = candidates.find((candidate) => candidate.eligible);
+  const attempts = Math.max(1, agentCase.auditTrail.filter((entry) => /assigned|rerouted|expired|declined/i.test(entry.event)).length);
+  return {
+    ...agentCase,
+    routing: {
+      requiredProductLine: productLineFromCase(agentCase),
+      recommendedAgentId: recommended?.agentId,
+      recommendedScore: recommended?.score ?? candidates[0]?.score ?? 0,
+      expiresInMinutes: agentCase.status === "assigned" ? 24 : agentCase.status === "available" || agentCase.status === "declined" ? 0 : 90,
+      attempts,
+      candidates,
+    },
+  };
+}
+
+function adminDashboard(): AdminAssignmentDashboard {
+  const cases = agentCases.map(adminCase);
+  return {
+    cases,
+    metrics: {
+      waitingForAssignment: cases.filter((agentCase) => agentCase.status === "available" || agentCase.status === "declined").length,
+      needsReroute: cases.filter((agentCase) => ["available", "declined"].includes(agentCase.status) || !agentCase.routing.recommendedAgentId).length,
+      activeAssignments: cases.filter((agentCase) => ["assigned", "accepted", "contacted", "application-started", "submitted"].includes(agentCase.status)).length,
+      potentialFees: cases.filter((agentCase) => !["declined", "not-placed"].includes(agentCase.status)).reduce((sum, agentCase) => sum + agentCase.assignmentFee, 0),
+    },
+  };
+}
+
+function assignCaseToAgent(agentCase: AgentCase, agentId: string, actor: string, reason?: string) {
+  const agent = agentDirectory.find((item) => item.id === agentId);
+  if (!agent) return undefined;
+  const candidate = candidateForCase(agent, agentCase);
+  agentCase.assignedAgent = profileFromAgent(agent);
+  agentCase.status = "assigned";
+  agentCase.chargeStatus = agent.feeAuthorizationAccepted && agent.paymentMethod.status === "verified" ? "authorized" : "pending";
+  agentCase.eligibility = {
+    licensedInState: agent.licenseStates.includes(agentCase.customer.state),
+    appointedWithCarrier: agent.carrierAppointments.includes(agentCase.carrierName),
+    capacityAvailable: agent.activeAssignments < agent.weeklyCapacity,
+    priorityReason: reason || candidate.explanation,
+  };
+  agentCase.auditTrail.unshift({
+    at: "Just now",
+    actor,
+    event: `Assigned to ${agent.name}. ${reason ? `Reason: ${reason}` : candidate.explanation}`,
+  });
+  return agentCase;
 }
 
 const seedCases: AgentCase[] = [
@@ -403,11 +648,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     agentProfile = parsed.data;
-    partnerAgent.name = agentProfile.name;
-    partnerAgent.agency = agentProfile.agency;
-    partnerAgent.licenseStates = agentProfile.licenseStates;
-    partnerAgent.carrierAppointments = agentProfile.carrierAppointments;
-    partnerAgent.phone = agentProfile.phone;
+    syncPrimaryAgentProfile();
 
     return res.json(profileReadiness(agentProfile));
   });
@@ -462,6 +703,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/agent/cases", (_req, res) => {
     return res.json(agentCases);
+  });
+
+  app.get("/api/admin/assignments", (_req, res) => {
+    return res.json(adminDashboard());
+  });
+
+  app.post("/api/admin/cases/:id/assign", (req, res) => {
+    const parsed = adminAssignAgentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid assignment action", issues: parsed.error.issues });
+    }
+
+    const target = agentCases.find((agentCase) => agentCase.id === req.params.id);
+    if (!target) return res.status(404).json({ message: "Case not found" });
+
+    const updated = assignCaseToAgent(target, parsed.data.agentId, "Admin", parsed.data.reason);
+    if (!updated) return res.status(404).json({ message: "Agent not found" });
+
+    return res.json(adminCase(updated));
+  });
+
+  app.post("/api/admin/cases/:id/reroute", (req, res) => {
+    const parsed = adminCaseActionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid reroute action", issues: parsed.error.issues });
+    }
+
+    const target = agentCases.find((agentCase) => agentCase.id === req.params.id);
+    if (!target) return res.status(404).json({ message: "Case not found" });
+
+    const candidates = adminCase(target).routing.candidates;
+    const currentAgentName = target.assignedAgent.name;
+    const next = candidates.find((candidate) => candidate.eligible && candidate.name !== currentAgentName) ?? candidates.find((candidate) => candidate.eligible);
+
+    if (!next) {
+      target.status = "available";
+      target.chargeStatus = "pending";
+      target.auditTrail.unshift({
+        at: "Just now",
+        actor: "Assignment Engine",
+        event: `No eligible agent found. Case moved to admin queue. ${parsed.data.reason ? `Reason: ${parsed.data.reason}` : ""}`,
+      });
+      return res.json(adminCase(target));
+    }
+
+    assignCaseToAgent(target, next.agentId, "Assignment Engine", parsed.data.reason || `Rerouted to best eligible agent with score ${next.score}.`);
+    target.auditTrail.unshift({
+      at: "Just now",
+      actor: "Assignment Engine",
+      event: `Reroute completed to ${next.name}.`,
+    });
+    return res.json(adminCase(target));
+  });
+
+  app.post("/api/admin/cases/:id/expire", (req, res) => {
+    const parsed = adminCaseActionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid expire action", issues: parsed.error.issues });
+    }
+
+    const target = agentCases.find((agentCase) => agentCase.id === req.params.id);
+    if (!target) return res.status(404).json({ message: "Case not found" });
+
+    target.status = "available";
+    target.chargeStatus = "pending";
+    target.auditTrail.unshift({
+      at: "Just now",
+      actor: "Assignment Engine",
+      event: `Assignment window expired and case returned to routing queue. ${parsed.data.reason ? `Reason: ${parsed.data.reason}` : ""}`,
+    });
+    return res.json(adminCase(target));
   });
 
   app.patch("/api/agent/cases/:id/status", (req, res) => {

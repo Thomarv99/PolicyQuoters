@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import MobileMvp from "@/pages/mobile-mvp";
 import AgentPortal from "@/pages/agent-portal";
 import AgentOnboarding from "@/pages/agent-onboarding";
+import AdminConsole from "@/pages/admin-console";
 
 function AppRouter() {
   return (
@@ -15,6 +16,7 @@ function AppRouter() {
       <Route path="/" component={MobileMvp} />
       <Route path="/agent" component={AgentPortal} />
       <Route path="/agent/onboarding" component={AgentOnboarding} />
+      <Route path="/admin" component={AdminConsole} />
       <Route component={NotFound} />
     </Switch>
   );
