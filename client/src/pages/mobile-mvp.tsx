@@ -228,6 +228,9 @@ function Welcome({ onStart }: { onStart: () => void }) {
           Choose coverage
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
+        <Button asChild variant="ghost" className="mt-2 h-11 w-full rounded-full" data-testid="button-welcome-agent-portal">
+          <Link href="/agent">Open agent portal demo</Link>
+        </Button>
         <p className="mt-3 text-center text-[11px] leading-4 text-muted-foreground">Prototype only. Final premiums depend on underwriting and carrier approval.</p>
       </div>
     </section>
