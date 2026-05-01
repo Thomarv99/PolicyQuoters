@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const quoteRequestSchema = z.object({
-  faceAmount: z.number().min(100_000).max(5_000_000),
+  lineType: z.enum(["term-life", "iul", "mortgage-protection", "whole-life", "universal-life", "final-expense", "annuities"]),
+  faceAmount: z.number().min(10_000).max(5_000_000),
   age: z.number().min(18).max(80),
   gender: z.enum(["female", "male"]),
   state: z.string().min(2).max(2),
@@ -39,7 +40,7 @@ export type QuoteOption = {
   carrierId: string;
   carrierName: string;
   productName: string;
-  productType: "Term" | "GUL";
+  productType: "Term" | "GUL" | "IUL" | "Whole Life" | "UL" | "Final Expense" | "Mortgage Protection" | "Annuity";
   monthlyPremium: number;
   annualPremium: number;
   amBestRating: string;

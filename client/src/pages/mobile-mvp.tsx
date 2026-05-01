@@ -21,6 +21,7 @@ import {
   FileText,
   HeartPulse,
   Home,
+  Landmark,
   Lock,
   PenLine,
   ShieldCheck,
@@ -30,11 +31,12 @@ import {
 } from "lucide-react";
 import type { ApplicationIntake, AssignmentResponse, QuoteOption, QuoteRequest, QuoteResponse } from "@shared/schema";
 
-type Step = "welcome" | "quote" | "results" | "selected" | "intake" | "disclosures" | "sign" | "assigned";
+type Step = "welcome" | "coverage" | "learn" | "quote" | "results" | "selected" | "intake" | "disclosures" | "sign" | "assigned";
 
-const steps: Step[] = ["welcome", "quote", "results", "selected", "intake", "disclosures", "sign", "assigned"];
+const steps: Step[] = ["welcome", "coverage", "learn", "quote", "results", "selected", "intake", "disclosures", "sign", "assigned"];
 
 const defaultQuote: QuoteRequest = {
+  lineType: "term-life",
   faceAmount: 750000,
   age: 42,
   gender: "male",
@@ -43,6 +45,74 @@ const defaultQuote: QuoteRequest = {
   tobacco: false,
   termLength: 20,
 };
+
+const lineTypes = [
+  {
+    id: "term-life",
+    title: "Life Insurance",
+    short: "Affordable death benefit coverage for a set term.",
+    learn: "Term life is usually the simplest way to get a large death benefit for a lower monthly premium. It is often used for income replacement, young families, and business protection.",
+    bestFor: "Families, income replacement, business protection",
+    icon: ShieldCheck,
+    faceAmount: 750000,
+  },
+  {
+    id: "iul",
+    title: "IUL",
+    short: "Permanent life insurance with index-linked cash value potential.",
+    learn: "Indexed universal life can combine lifetime death benefit protection with cash value that may be credited based on market index performance, subject to product caps, floors, fees, and carrier rules.",
+    bestFor: "Permanent coverage, accumulation strategy, legacy planning",
+    icon: Sparkles,
+    faceAmount: 500000,
+  },
+  {
+    id: "mortgage-protection",
+    title: "Mortgage Protection",
+    short: "Coverage designed around a mortgage payoff need.",
+    learn: "Mortgage protection is typically positioned to help a family keep the home or pay down the loan if the insured dies. In many cases, this can be quoted using term life coverage matched to the loan amount and years remaining.",
+    bestFor: "Homeowners, loan payoff planning, family protection",
+    icon: Home,
+    faceAmount: 450000,
+  },
+  {
+    id: "whole-life",
+    title: "Whole Life",
+    short: "Lifetime coverage with guaranteed cash value emphasis.",
+    learn: "Whole life is permanent coverage designed to last for life when premiums are paid. It can include guarantees and cash value, but usually costs more than term coverage.",
+    bestFor: "Lifetime guarantees, conservative planning, legacy goals",
+    icon: HeartPulse,
+    faceAmount: 250000,
+  },
+  {
+    id: "universal-life",
+    title: "Universal Life",
+    short: "Flexible permanent coverage and premium design.",
+    learn: "Universal life can provide permanent coverage with more premium and death-benefit flexibility than traditional whole life, depending on the product design and carrier.",
+    bestFor: "Flexible permanent coverage, estate needs, business planning",
+    icon: BadgeCheck,
+    faceAmount: 500000,
+  },
+  {
+    id: "final-expense",
+    title: "Final Expense",
+    short: "Smaller coverage for burial and final costs.",
+    learn: "Final expense life insurance is usually smaller face amount coverage intended to help with funeral, burial, and final bills. It may have simpler underwriting depending on the carrier.",
+    bestFor: "Burial costs, seniors, smaller coverage needs",
+    icon: FileText,
+    faceAmount: 25000,
+  },
+  {
+    id: "annuities",
+    title: "Annuities",
+    short: "Retirement accumulation and income options.",
+    learn: "Annuities are not life insurance death benefit quotes; they are retirement products that can support accumulation, income, and principal-protection goals depending on the contract type.",
+    bestFor: "Retirement income, accumulation, principal protection",
+    icon: Landmark,
+    faceAmount: 100000,
+  },
+] as const;
+
+type LineTypeId = (typeof lineTypes)[number]["id"];
 
 const defaultIntake: Omit<ApplicationIntake, "quoteId"> = {
   legalName: "Jordan Riley",
@@ -154,10 +224,145 @@ function Welcome({ onStart }: { onStart: () => void }) {
       </div>
       <div className="sticky bottom-0 -mx-4 border-t border-border bg-background/95 p-4 backdrop-blur">
         <Button className="h-12 w-full rounded-full" onClick={onStart} data-testid="button-start">
-          Start quote
+          Choose coverage
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
         <p className="mt-3 text-center text-[11px] leading-4 text-muted-foreground">Prototype only. Final premiums depend on underwriting and carrier approval.</p>
+      </div>
+    </section>
+  );
+}
+
+function CoverageSelection({
+  quote,
+  setQuote,
+  onLearn,
+  onQuote,
+}: {
+  quote: QuoteRequest;
+  setQuote: (quote: QuoteRequest) => void;
+  onLearn: (lineId: LineTypeId) => void;
+  onQuote: (lineId: LineTypeId) => void;
+}) {
+  const chooseLine = (line: (typeof lineTypes)[number]) => {
+    setQuote({
+      ...quote,
+      lineType: line.id,
+      faceAmount: line.faceAmount,
+      termLength: line.id === "annuities" ? 10 : quote.termLength,
+    });
+  };
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <Badge variant="secondary" className="rounded-full">
+          Start with the need
+        </Badge>
+        <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em]">What would you like a quote on?</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Pick an insurance line first. You can learn about each option, then get quotes when you are ready.
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {lineTypes.map((line) => {
+          const Icon = line.icon;
+          const selectedLine = quote.lineType === line.id;
+          return (
+            <Card key={line.id} className={cn("bg-card/90 transition", selectedLine && "border-primary bg-primary/5")} data-testid={`card-line-${line.id}`}>
+              <CardContent className="space-y-4 p-4">
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-3 text-left"
+                  onClick={() => chooseLine(line)}
+                  data-testid={`button-choose-line-${line.id}`}
+                >
+                  <Icon className="mt-0.5 h-5 w-5 flex-none text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">{line.title}</span>
+                      {selectedLine ? <Badge className="rounded-full">Selected</Badge> : null}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">{line.short}</span>
+                    <span className="mt-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{line.bestFor}</span>
+                  </span>
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      chooseLine(line);
+                      onLearn(line.id);
+                    }}
+                    data-testid={`button-learn-${line.id}`}
+                  >
+                    Learn More
+                  </Button>
+                  <Button
+                    className="rounded-full"
+                    onClick={() => {
+                      chooseLine(line);
+                      onQuote(line.id);
+                    }}
+                    data-testid={`button-quote-${line.id}`}
+                  >
+                    Get quotes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function LearnLine({
+  line,
+  onQuote,
+  onBackToOptions,
+}: {
+  line: (typeof lineTypes)[number];
+  onQuote: () => void;
+  onBackToOptions: () => void;
+}) {
+  const Icon = line.icon;
+  const educationCards = [
+    ["What it is", line.learn],
+    ["Best for", line.bestFor],
+    ["What affects price", line.id === "annuities" ? "Contribution amount, income goals, state availability, carrier product design, surrender schedule, and selected riders." : "Age, health class, tobacco use, state availability, coverage amount, term length, riders, and carrier underwriting rules."],
+    ["What happens next", "After you choose a quote, the app can collect application intake, disclosures, and a signature before assigning the packet to a licensed agent."],
+  ];
+
+  return (
+    <section className="space-y-5">
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="p-5">
+          <Icon className="h-7 w-7 text-primary" />
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em]">{line.title}</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{line.short}</p>
+        </CardContent>
+      </Card>
+      <div className="grid gap-3 pb-24">
+        {educationCards.map(([title, copy]) => (
+          <Card key={title} className="bg-card/90" data-testid={`card-education-${String(title).toLowerCase().replaceAll(" ", "-")}`}>
+            <CardContent className="p-4">
+              <h2 className="text-sm font-semibold">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="sticky bottom-0 -mx-4 space-y-2 border-t border-border bg-background/95 p-4 backdrop-blur">
+        <Button className="h-12 w-full rounded-full" onClick={onQuote} data-testid="button-learn-get-quotes">
+          Get {line.title} quotes
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+        <Button variant="ghost" className="h-11 w-full rounded-full" onClick={onBackToOptions} data-testid="button-back-coverage-options">
+          Back to coverage options
+        </Button>
       </div>
     </section>
   );
@@ -168,27 +373,50 @@ function QuoteBasics({
   setQuote,
   onSubmit,
   loading,
+  line,
+  onChangeLine,
 }: {
   quote: QuoteRequest;
   setQuote: (quote: QuoteRequest) => void;
   onSubmit: () => void;
   loading: boolean;
+  line: (typeof lineTypes)[number];
+  onChangeLine: () => void;
 }) {
+  const Icon = line.icon;
+  const amountLabel = line.id === "annuities" ? "Contribution amount" : "Coverage amount";
+  const amountHelp = line.id === "annuities" ? "This MVP treats the amount as an initial premium/contribution target." : "Adjust the death benefit to compare pricing paths.";
+
   return (
     <section className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-[-0.03em]">Get your quote</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Start with the minimum fields needed to compare real carrier options later.</p>
+        <h1 className="text-2xl font-bold tracking-[-0.03em]">Get {line.title} quotes</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Start with the minimum fields needed to compare carrier options later.</p>
       </div>
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="flex items-start gap-3">
+            <Icon className="mt-0.5 h-5 w-5 flex-none text-primary" />
+            <div>
+              <p className="text-sm font-semibold">{line.title}</p>
+              <p className="text-xs leading-5 text-muted-foreground">{line.short}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="rounded-full" onClick={onChangeLine} data-testid="button-change-line">
+            Change
+          </Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="space-y-4 p-4">
-          <Field label="Coverage amount">
+          <Field label={amountLabel}>
             <Input
               type="number"
               value={quote.faceAmount}
               onChange={(event) => setQuote({ ...quote, faceAmount: Number(event.target.value) })}
               data-testid="input-face-amount"
             />
+            <p className="text-xs text-muted-foreground">{amountHelp}</p>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Age">
@@ -308,11 +536,13 @@ function Results({
   selected,
   setSelected,
   onContinue,
+  line,
 }: {
   response?: QuoteResponse;
   selected?: QuoteOption;
   setSelected: (option: QuoteOption) => void;
   onContinue: () => void;
+  line: (typeof lineTypes)[number];
 }) {
   if (!response) return null;
   return (
@@ -321,10 +551,10 @@ function Results({
         <Badge variant="secondary" className="rounded-full">
           {response.summary.returnedQuotes} quote paths
         </Badge>
-        <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em]">Choose your coverage</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Sorted by monthly premium with AM Best rating and conversion notes.</p>
+        <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em]">Choose your {line.title} option</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Sorted by monthly premium with AM Best rating and product notes.</p>
       </div>
-      <div className="grid gap-3">
+      <div className="grid gap-3 pb-20">
         {response.options.slice(0, 8).map((option) => (
           <QuoteCard key={option.quoteId} option={option} selected={selected?.quoteId === option.quoteId} onSelect={() => setSelected(option)} />
         ))}
@@ -339,13 +569,13 @@ function Results({
   );
 }
 
-function SelectedQuote({ selected, onContinue }: { selected?: QuoteOption; onContinue: () => void }) {
+function SelectedQuote({ selected, onContinue, line }: { selected?: QuoteOption; onContinue: () => void; line: (typeof lineTypes)[number] }) {
   if (!selected) return null;
   return (
     <section className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-[-0.03em]">Lock this quote snapshot</h1>
-        <p className="mt-2 text-sm text-muted-foreground">This package carries forward into application intake and agent assignment.</p>
+        <p className="mt-2 text-sm text-muted-foreground">This {line.title} package carries forward into application intake and agent assignment.</p>
       </div>
       <Card className="border-primary/40 bg-primary/5">
         <CardHeader>
@@ -553,12 +783,15 @@ function Assigned({ selected, assignment }: { selected?: QuoteOption; assignment
 export default function MobileMvp() {
   const [step, setStep] = useState<Step>("welcome");
   const [quote, setQuote] = useState<QuoteRequest>(defaultQuote);
+  const [learnLineId, setLearnLineId] = useState<LineTypeId>("term-life");
   const [quoteResponse, setQuoteResponse] = useState<QuoteResponse | undefined>();
   const [selected, setSelected] = useState<QuoteOption | undefined>();
   const [intake, setIntake] = useState<Omit<ApplicationIntake, "quoteId">>(defaultIntake);
   const [accepted, setAccepted] = useState(false);
   const [signature, setSignature] = useState(defaultIntake.legalName);
   const [assignment, setAssignment] = useState<AssignmentResponse | undefined>();
+  const selectedLine = lineTypes.find((line) => line.id === quote.lineType) ?? lineTypes[0];
+  const learnLine = lineTypes.find((line) => line.id === learnLineId) ?? selectedLine;
 
   const quoteMutation = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/quotes", quote)).json() as Promise<QuoteResponse>,
@@ -584,6 +817,10 @@ export default function MobileMvp() {
   });
 
   const back = () => {
+    if (step === "quote" || step === "learn") {
+      setStep("coverage");
+      return;
+    }
     const current = steps.indexOf(step);
     setStep(steps[Math.max(0, current - 1)]);
   };
@@ -591,13 +828,36 @@ export default function MobileMvp() {
   const content = useMemo(() => {
     switch (step) {
       case "welcome":
-        return <Welcome onStart={() => setStep("quote")} />;
+        return <Welcome onStart={() => setStep("coverage")} />;
+      case "coverage":
+        return (
+          <CoverageSelection
+            quote={quote}
+            setQuote={setQuote}
+            onLearn={(lineId) => {
+              setLearnLineId(lineId);
+              setStep("learn");
+            }}
+            onQuote={() => setStep("quote")}
+          />
+        );
+      case "learn":
+        return <LearnLine line={learnLine} onQuote={() => setStep("quote")} onBackToOptions={() => setStep("coverage")} />;
       case "quote":
-        return <QuoteBasics quote={quote} setQuote={setQuote} onSubmit={() => quoteMutation.mutate()} loading={quoteMutation.isPending} />;
+        return (
+          <QuoteBasics
+            quote={quote}
+            setQuote={setQuote}
+            onSubmit={() => quoteMutation.mutate()}
+            loading={quoteMutation.isPending}
+            line={selectedLine}
+            onChangeLine={() => setStep("coverage")}
+          />
+        );
       case "results":
-        return <Results response={quoteResponse} selected={selected} setSelected={setSelected} onContinue={() => setStep("selected")} />;
+        return <Results response={quoteResponse} selected={selected} setSelected={setSelected} onContinue={() => setStep("selected")} line={selectedLine} />;
       case "selected":
-        return <SelectedQuote selected={selected} onContinue={() => setStep("intake")} />;
+        return <SelectedQuote selected={selected} onContinue={() => setStep("intake")} line={selectedLine} />;
       case "intake":
         return <Intake intake={intake} setIntake={setIntake} onContinue={() => setStep("disclosures")} />;
       case "disclosures":
@@ -609,7 +869,7 @@ export default function MobileMvp() {
       default:
         return null;
     }
-  }, [accepted, assignment, assignmentMutation.isPending, intake, quote, quoteMutation.isPending, quoteResponse, selected, signature, step]);
+  }, [accepted, assignment, assignmentMutation.isPending, intake, learnLine, quote, quoteMutation.isPending, quoteResponse, selected, selectedLine, signature, step]);
 
   return <Shell step={step} onBack={back}>{content}</Shell>;
 }
