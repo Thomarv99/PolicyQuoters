@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Router } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,13 @@ import AgentPortal from "@/pages/agent-portal";
 import AgentOnboarding from "@/pages/agent-onboarding";
 import AdminConsole from "@/pages/admin-console";
 import { BrokerProfilePage, DirectoryPage, LoginPage, PublicHome, QuotesPage } from "@/pages/website";
+
+function routerBase() {
+  const path = window.location.pathname;
+  const indexPath = "/index.html";
+  if (!path.endsWith(indexPath)) return "";
+  return path;
+}
 
 function AppRouter() {
   return (
@@ -34,7 +41,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AppRouter />
+        <Router base={routerBase()}>
+          <AppRouter />
+        </Router>
       </TooltipProvider>
     </QueryClientProvider>
   );
