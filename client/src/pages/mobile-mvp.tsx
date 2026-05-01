@@ -231,6 +231,9 @@ function Welcome({ onStart }: { onStart: () => void }) {
         <Button asChild variant="ghost" className="mt-2 h-11 w-full rounded-full" data-testid="button-welcome-agent-portal">
           <Link href="/agent">Open agent portal demo</Link>
         </Button>
+        <Button asChild variant="ghost" className="h-11 w-full rounded-full" data-testid="button-welcome-website">
+          <Link href="/">Back to PolicyQuoters website</Link>
+        </Button>
         <p className="mt-3 text-center text-[11px] leading-4 text-muted-foreground">Prototype only. Final premiums depend on underwriting and carrier approval.</p>
       </div>
     </section>
@@ -767,6 +770,9 @@ function Assigned({ selected, assignment }: { selected?: QuoteOption; assignment
       </Card>
       <Button asChild variant="outline" className="h-12 w-full rounded-full" data-testid="button-open-agent-portal">
         <Link href="/agent">Open agent portal demo</Link>
+      </Button>
+      <Button asChild variant="outline" className="h-12 w-full rounded-full" data-testid="button-open-website">
+        <Link href="/">Back to PolicyQuoters website</Link>
       </Button>
       <Card>
         <CardHeader>
