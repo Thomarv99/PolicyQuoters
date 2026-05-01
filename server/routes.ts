@@ -1,10 +1,13 @@
 import type { Express } from "express";
 import type { Server } from "node:http";
 import {
+  agentProfileSchema,
   agentStatusUpdateSchema,
   assignmentRequestSchema,
   quoteRequestSchema,
   type AgentCase,
+  type AgentProfile,
+  type AgentProfileReadiness,
   type AgentCaseStatus,
   type AssignmentResponse,
   type QuoteOption,
@@ -108,6 +111,47 @@ const partnerAgent: AssignmentResponse["assignedAgent"] = {
   carrierAppointments: ["Banner Life", "Protective", "Pacific Life", "Prudential", "Guardian", "MassMutual"],
   phone: "(800) 555-0148",
 };
+
+let agentProfile: AgentProfile = {
+  name: partnerAgent.name,
+  agency: partnerAgent.agency,
+  npn: "18273645",
+  email: "maya.thompson@example.com",
+  phone: partnerAgent.phone,
+  licenseStates: partnerAgent.licenseStates,
+  carrierAppointments: partnerAgent.carrierAppointments,
+  productLines: ["term-life", "iul", "mortgage-protection"],
+  weeklyCapacity: 12,
+  acceptsInstantAssignments: false,
+  paymentMethod: {
+    brand: "Visa",
+    last4: "4242",
+    status: "verified",
+  },
+  agreementAccepted: false,
+  feeAuthorizationAccepted: false,
+};
+
+function profileReadiness(profile: AgentProfile): AgentProfileReadiness {
+  const missing: string[] = [];
+  if (!profile.licenseStates.length) missing.push("Add at least one licensed state.");
+  if (!profile.carrierAppointments.length) missing.push("Add at least one carrier appointment.");
+  if (!profile.productLines.length) missing.push("Select product lines you will accept.");
+  if (profile.weeklyCapacity < 1) missing.push("Set weekly assignment capacity.");
+  if (profile.paymentMethod.status !== "verified") missing.push("Add a verified payment method.");
+  if (!profile.agreementAccepted) missing.push("Accept the partner assignment agreement.");
+  if (!profile.feeAuthorizationAccepted) missing.push("Authorize assignment-fee charges.");
+  if (!profile.acceptsInstantAssignments) missing.push("Turn on instant assignments.");
+
+  const totalChecks = 8;
+  const score = Math.round(((totalChecks - missing.length) / totalChecks) * 100);
+  return {
+    ready: missing.length === 0,
+    score,
+    missing,
+    profile,
+  };
+}
 
 const seedCases: AgentCase[] = [
   {
@@ -348,6 +392,26 @@ function caseFromAssignment(assignment: AssignmentResponse, request: { intake: A
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.get("/api/agent/profile", (_req, res) => {
+    return res.json(profileReadiness(agentProfile));
+  });
+
+  app.put("/api/agent/profile", (req, res) => {
+    const parsed = agentProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid agent profile", issues: parsed.error.issues });
+    }
+
+    agentProfile = parsed.data;
+    partnerAgent.name = agentProfile.name;
+    partnerAgent.agency = agentProfile.agency;
+    partnerAgent.licenseStates = agentProfile.licenseStates;
+    partnerAgent.carrierAppointments = agentProfile.carrierAppointments;
+    partnerAgent.phone = agentProfile.phone;
+
+    return res.json(profileReadiness(agentProfile));
+  });
+
   app.post("/api/quotes", (req, res) => {
     const parsed = quoteRequestSchema.safeParse(req.body);
     if (!parsed.success) {

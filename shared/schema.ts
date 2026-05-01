@@ -50,11 +50,42 @@ export const agentStatusUpdateSchema = z.object({
   reason: z.string().optional(),
 });
 
+export const agentProductLineSchema = z.enum(["term-life", "iul", "mortgage-protection", "whole-life", "universal-life", "final-expense", "annuities"]);
+
+export const agentProfileSchema = z.object({
+  name: z.string().min(2),
+  agency: z.string().min(2),
+  npn: z.string().min(4),
+  email: z.string().email(),
+  phone: z.string().min(10),
+  licenseStates: z.array(z.string().min(2).max(2)).min(1),
+  carrierAppointments: z.array(z.string().min(2)).min(1),
+  productLines: z.array(agentProductLineSchema).min(1),
+  weeklyCapacity: z.number().min(1).max(100),
+  acceptsInstantAssignments: z.boolean(),
+  paymentMethod: z.object({
+    brand: z.string().min(2),
+    last4: z.string().min(4).max(4),
+    status: z.enum(["not-added", "verified"]),
+  }),
+  agreementAccepted: z.boolean(),
+  feeAuthorizationAccepted: z.boolean(),
+});
+
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
 export type ApplicationIntake = z.infer<typeof applicationIntakeSchema>;
 export type AssignmentRequest = z.infer<typeof assignmentRequestSchema>;
 export type AgentCaseStatus = z.infer<typeof agentCaseStatusSchema>;
 export type AgentStatusUpdate = z.infer<typeof agentStatusUpdateSchema>;
+export type AgentProductLine = z.infer<typeof agentProductLineSchema>;
+export type AgentProfile = z.infer<typeof agentProfileSchema>;
+
+export type AgentProfileReadiness = {
+  ready: boolean;
+  score: number;
+  missing: string[];
+  profile: AgentProfile;
+};
 
 export type QuoteOption = {
   quoteId: string;

@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AgentCase, AgentCaseStatus } from "@shared/schema";
+import type { AgentCase, AgentCaseStatus, AgentProfileReadiness } from "@shared/schema";
 
 const acceptanceStatuses: AgentCaseStatus[] = ["available", "assigned"];
 const activeStatuses: AgentCaseStatus[] = ["accepted", "contacted", "application-started", "submitted"];
@@ -184,6 +184,32 @@ function MetricCard({ title, value, detail, icon: Icon }: { title: string; value
           <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
         </div>
         <Icon className="h-5 w-5 text-primary" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReadinessBanner({ readiness }: { readiness?: AgentProfileReadiness }) {
+  if (!readiness) return null;
+
+  return (
+    <Card className={cn("mb-5", readiness.ready ? "border-primary/30 bg-primary/5" : "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40")}>
+      <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3">
+          {readiness.ready ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-primary" /> : <ShieldCheck className="mt-0.5 h-5 w-5 text-amber-700" />}
+          <div>
+            <p className="font-semibold">{readiness.ready ? "Agent ready for instant assignments" : "Agent setup is not complete"}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {readiness.ready
+                ? "Licensing, appointments, payment method, and assignment-fee authorization are ready."
+                : `${readiness.score}% complete. Finish setup before routing live paid assignments to this agent.`}
+            </p>
+            {!readiness.ready && readiness.missing.length ? <p className="mt-1 text-xs text-muted-foreground">Next: {readiness.missing[0]}</p> : null}
+          </div>
+        </div>
+        <Button asChild variant={readiness.ready ? "outline" : "default"} className="rounded-full" data-testid="button-open-onboarding-banner">
+          <Link href="/agent/onboarding">{readiness.ready ? "Review setup" : "Finish setup"}</Link>
+        </Button>
       </CardContent>
     </Card>
   );
@@ -575,6 +601,7 @@ function CaseDetail({
 export default function AgentPortal() {
   const [selectedCaseId, setSelectedCaseId] = useState<string>();
   const { data: cases = [], isLoading } = useQuery<AgentCase[]>({ queryKey: ["/api/agent/cases"] });
+  const { data: readiness } = useQuery<AgentProfileReadiness>({ queryKey: ["/api/agent/profile"] });
 
   const sortedCases = useMemo(() => [...cases].sort((a, b) => caseRank(a) - caseRank(b) || b.priorityScore - a.priorityScore), [cases]);
 
@@ -613,6 +640,9 @@ export default function AgentPortal() {
             <Badge variant="secondary" className="rounded-full">
               Demo workspace
             </Badge>
+            <Button asChild variant="outline" className="rounded-full" data-testid="button-open-onboarding">
+              <Link href="/agent/onboarding">Agent setup</Link>
+            </Button>
             <Button asChild variant="outline" className="rounded-full" data-testid="button-open-consumer-app">
               <Link href="/">Consumer app</Link>
             </Button>
@@ -621,6 +651,7 @@ export default function AgentPortal() {
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
+        <ReadinessBanner readiness={readiness} />
         <section className="mb-5 rounded-3xl border border-border bg-card/86 p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
