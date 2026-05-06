@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
+import DesktopQuoteFlow from "./desktop-quote-flow";
 import {
   ArrowRight,
   BadgeCheck,
@@ -15,7 +16,6 @@ import {
   Sparkles,
   Star,
   UserRoundCheck,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 type QuoteIntent = "life-insurance" | "iul" | "mortgage-protection" | "whole-life" | "final-expense";
 type LoginRole = "consumer" | "agent" | "admin";
@@ -227,9 +226,6 @@ function WebsiteHeader({ onQuote }: { onQuote: (intent?: QuoteIntent) => void })
           <Button asChild variant="ghost" className="rounded-full" data-testid="link-nav-directory">
             <Link href="/directory">Find brokers</Link>
           </Button>
-          <Button asChild variant="ghost" className="rounded-full" data-testid="link-nav-app">
-            <Link href="/app">Continue quote</Link>
-          </Button>
           <Button asChild variant="outline" className="rounded-full" data-testid="link-nav-login">
             <Link href="/login/consumer">Login</Link>
           </Button>
@@ -257,7 +253,6 @@ function WebsiteFooter() {
           <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
             <Link href="/quotes">Get life insurance quotes</Link>
             <Link href="/directory">Broker directory</Link>
-            <Link href="/app">Continue a quote</Link>
           </div>
         </div>
         <div>
@@ -273,90 +268,19 @@ function WebsiteFooter() {
   );
 }
 
-function QuoteModal({
-  open,
-  intent,
-  brokerName,
-  onClose,
-}: {
-  open: boolean;
-  intent?: QuoteIntent;
-  brokerName?: string;
-  onClose: () => void;
-}) {
-  const selectedLine = insuranceLines.find((line) => line.id === intent) ?? insuranceLines[0];
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-      <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto">
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Badge className="rounded-full" variant="secondary">
-                Quick quote start
-              </Badge>
-              <h2 className="mt-3 text-xl font-semibold tracking-[-0.03em]">Start your {selectedLine.title.toLowerCase()}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {brokerName ? `Compare options first, then choose whether you want help from ${brokerName}.` : "Answer a few basics to start comparing coverage options."}
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close quote modal" data-testid="button-close-quote-modal">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>ZIP code</Label>
-              <Input placeholder="10013" data-testid="input-modal-zip" />
-            </div>
-            <div className="space-y-2">
-              <Label>Coverage amount</Label>
-              <Input placeholder="$500,000" data-testid="input-modal-coverage" />
-            </div>
-            <div className="space-y-2">
-              <Label>Age</Label>
-              <Input placeholder="42" data-testid="input-modal-age" />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input placeholder="you@example.com" data-testid="input-modal-email" />
-            </div>
-          </div>
-          <div className="mt-5 rounded-2xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
-            Your information helps us personalize quotes by location, coverage amount, and basic eligibility. You can review options before choosing what to do next.
-          </div>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={onClose} data-testid="button-modal-cancel">
-              Keep browsing
-            </Button>
-            <Button asChild className="rounded-full" data-testid="button-modal-start-pwa">
-              <Link href="/app">
-                Continue to quote app
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+function quoteHref(intent?: QuoteIntent, brokerName?: string) {
+  const params = new URLSearchParams();
+  if (intent) params.set("intent", intent);
+  if (brokerName) params.set("broker", brokerName);
+  const query = params.toString();
+  return query ? `/quotes?${query}` : "/quotes";
 }
 
 function WebsiteShell({
   children,
-  quoteOpen,
-  quoteIntent,
-  brokerName,
-  setQuoteOpen,
   openQuote,
 }: {
   children: React.ReactNode;
-  quoteOpen: boolean;
-  quoteIntent?: QuoteIntent;
-  brokerName?: string;
-  setQuoteOpen: (open: boolean) => void;
   openQuote: (intent?: QuoteIntent, brokerName?: string) => void;
 }) {
   return (
@@ -364,23 +288,16 @@ function WebsiteShell({
       <WebsiteHeader onQuote={openQuote} />
       {children}
       <WebsiteFooter />
-      <QuoteModal open={quoteOpen} intent={quoteIntent} brokerName={brokerName} onClose={() => setQuoteOpen(false)} />
     </div>
   );
 }
 
-function useQuoteModal() {
-  const [quoteOpen, setQuoteOpen] = useState(false);
-  const [quoteIntent, setQuoteIntent] = useState<QuoteIntent | undefined>();
-  const [brokerName, setBrokerName] = useState<string | undefined>();
-
-  const openQuote = (intent?: QuoteIntent, broker?: string) => {
-    setQuoteIntent(intent);
-    setBrokerName(broker);
-    setQuoteOpen(true);
+function useQuoteNavigation() {
+  const [, navigate] = useLocation();
+  const openQuote = (intent?: QuoteIntent, brokerName?: string) => {
+    navigate(quoteHref(intent, brokerName));
   };
-
-  return { quoteOpen, setQuoteOpen, quoteIntent, brokerName, openQuote };
+  return { openQuote };
 }
 
 function HeroPanel({ onQuote }: { onQuote: (intent?: QuoteIntent) => void }) {
@@ -544,7 +461,7 @@ function BrokerCard({ broker, onQuote }: { broker: (typeof brokers)[number]; onQ
 }
 
 export function PublicHome() {
-  const modal = useQuoteModal();
+  const modal = useQuoteNavigation();
   const jsonLd = useMemo(
     () => ({
       "@context": "https://schema.org",
@@ -564,7 +481,7 @@ export function PublicHome() {
   });
 
   return (
-    <WebsiteShell {...modal}>
+    <WebsiteShell openQuote={modal.openQuote}>
       <HeroPanel onQuote={modal.openQuote} />
       <LinesSection onQuote={modal.openQuote} />
       <DirectoryPreview onQuote={modal.openQuote} />
@@ -573,10 +490,10 @@ export function PublicHome() {
           <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.04em]">Ready to compare coverage?</h2>
-              <p className="mt-2 text-sm leading-6 opacity-85">Start with a few basic details, review available options, and continue when it is convenient for you.</p>
+              <p className="mt-2 text-sm leading-6 opacity-85">Start with a few basic details, review carrier options side by side, and complete the application when you&apos;re ready.</p>
             </div>
-            <Button asChild variant="secondary" className="rounded-full" data-testid="button-open-pwa-cta">
-              <Link href="/app">Continue quote</Link>
+            <Button asChild variant="secondary" className="rounded-full" data-testid="button-home-start-quote-cta">
+              <Link href="/quotes">Start your quote</Link>
             </Button>
           </CardContent>
         </Card>
@@ -586,7 +503,7 @@ export function PublicHome() {
 }
 
 export function QuotesPage() {
-  const modal = useQuoteModal();
+  const modal = useQuoteNavigation();
   const jsonLd = useMemo(
     () => ({
       "@context": "https://schema.org",
@@ -596,7 +513,7 @@ export function QuotesPage() {
         name: `How do ${line.keyword} work on PolicyQuoters?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `PolicyQuoters lets consumers compare ${line.keyword}, continue into a mobile-friendly quote flow, and connect with licensed insurance brokers after selecting an option.`,
+          text: `PolicyQuoters lets consumers compare ${line.keyword} side by side from carriers, lock in a selected quote, and connect with licensed insurance brokers after reviewing options.`,
         },
       })),
     }),
@@ -604,49 +521,22 @@ export function QuotesPage() {
   );
   useSeo({
     title: "Life Insurance Quotes Online | PolicyQuoters",
-    description: "Compare life insurance, IUL, mortgage protection, whole life, and final expense quote options with PolicyQuoters.",
+    description: "Compare life insurance, IUL, mortgage protection, whole life, and final expense quote options with PolicyQuoters in a desktop-first experience.",
     path: "/quotes",
     jsonLd,
   });
 
   return (
-    <WebsiteShell {...modal}>
+    <WebsiteShell openQuote={modal.openQuote}>
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <div className="rounded-3xl border border-border bg-card/86 p-6">
-          <Badge variant="outline" className="rounded-full">
-            Quote pages
-          </Badge>
-          <h1 className="mt-4 text-4xl font-bold tracking-[-0.06em]">Get life insurance quotes online.</h1>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-muted-foreground">
-            Choose a line of insurance, compare coverage options, and continue through a mobile-friendly quote experience.
-          </p>
-        </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {insuranceLines.map((line) => (
-            <Card key={line.id}>
-              <CardContent className="p-5">
-                <line.icon className="h-6 w-6 text-primary" />
-                <h2 className="mt-4 text-xl font-semibold tracking-[-0.03em]">{line.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{line.description}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="rounded-full">{line.keyword}</Badge>
-                  <Badge variant="secondary" className="rounded-full">Licensed broker help</Badge>
-                  <Badge variant="secondary" className="rounded-full">Mobile-friendly</Badge>
-                </div>
-                <Button className="mt-5 rounded-full" onClick={() => modal.openQuote(line.id)} data-testid={`button-quotes-page-${line.id}`}>
-                  Start {line.title}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <DesktopQuoteFlow />
       </main>
     </WebsiteShell>
   );
 }
 
 export function DirectoryPage() {
-  const modal = useQuoteModal();
+  const modal = useQuoteNavigation();
   const [query, setQuery] = useState("");
   const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const filtered = brokers.filter((broker) => {
@@ -674,7 +564,7 @@ export function DirectoryPage() {
   });
 
   return (
-    <WebsiteShell {...modal}>
+    <WebsiteShell openQuote={modal.openQuote}>
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <section className="rounded-3xl border border-border bg-card/86 p-6">
           <Badge variant="outline" className="rounded-full">
@@ -703,7 +593,7 @@ export function DirectoryPage() {
 
 export function BrokerProfilePage() {
   const { slug } = useParams<{ slug: string }>();
-  const modal = useQuoteModal();
+  const modal = useQuoteNavigation();
   const broker = brokers.find((item) => item.slug === slug) ?? brokers[0];
   const jsonLd = useMemo(
     () => ({
@@ -735,7 +625,7 @@ export function BrokerProfilePage() {
   });
 
   return (
-    <WebsiteShell {...modal}>
+    <WebsiteShell openQuote={modal.openQuote}>
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <section className="grid gap-6 lg:grid-cols-[1fr_24rem]">
           <Card className="bg-card/90">
@@ -801,7 +691,7 @@ export function LoginPage({ role }: { role: LoginRole }) {
     consumer: {
       title: "Consumer login",
       description: "Return to saved quotes, applications, documents, and coverage progress.",
-      destination: "/app",
+      destination: "/quotes",
       cta: "Open quote dashboard",
     },
     agent: {
