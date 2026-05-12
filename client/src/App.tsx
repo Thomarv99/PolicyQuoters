@@ -8,7 +8,7 @@ import MobileMvp from "@/pages/mobile-mvp";
 import AgentPortal from "@/pages/agent-portal";
 import AgentOnboarding from "@/pages/agent-onboarding";
 import AdminConsole from "@/pages/admin-console";
-import { BrokerProfilePage, DirectoryPage, LoginPage, PublicHome, QuotesPage } from "@/pages/website";
+import { BrokerProfilePage, DirectoryPage, LoginPage, PrivacyPolicyPage, PublicHome, QuotesPage } from "@/pages/website";
 
 function routerBase() {
   const path = window.location.pathname;
@@ -24,6 +24,7 @@ function AppRouter() {
       <Route path="/quotes" component={QuotesPage} />
       <Route path="/directory" component={DirectoryPage} />
       <Route path="/brokers/:slug" component={BrokerProfilePage} />
+      <Route path="/privacy-policy" component={PrivacyPolicyPage} />
       <Route path="/login/consumer">{() => <LoginPage role="consumer" />}</Route>
       <Route path="/login/agent">{() => <LoginPage role="agent" />}</Route>
       <Route path="/login/admin">{() => <LoginPage role="admin" />}</Route>

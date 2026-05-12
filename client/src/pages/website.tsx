@@ -264,6 +264,14 @@ function WebsiteFooter() {
           </div>
         </div>
       </div>
+      <div className="border-t border-border">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p>&copy; {new Date().getFullYear()} PolicyQuoters. All rights reserved.</p>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/privacy-policy" data-testid="link-footer-privacy">Privacy Policy</Link>
+          </div>
+        </div>
+      </div>
     </footer>
   );
 }
@@ -683,6 +691,130 @@ function InfoList({ title, items }: { title: string; items: string[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+export function PrivacyPolicyPage() {
+  const modal = useQuoteNavigation();
+  useSeo({
+    title: "Privacy Policy | PolicyQuoters",
+    description:
+      "Read the PolicyQuoters privacy policy describing how we collect, use, share, and protect personal information when you compare life insurance quotes and connect with licensed brokers.",
+    path: "/privacy-policy",
+  });
+
+  return (
+    <WebsiteShell openQuote={modal.openQuote}>
+      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <section className="rounded-3xl border border-border bg-card/86 p-6 sm:p-8">
+          <Badge variant="outline" className="rounded-full">
+            Privacy
+          </Badge>
+          <h1 className="mt-4 text-4xl font-bold tracking-[-0.06em]">Privacy Policy</h1>
+          <p className="mt-3 text-sm text-muted-foreground">Effective date: May 12, 2026</p>
+          <p className="mt-5 text-base leading-7 text-muted-foreground">
+            This Privacy Policy explains how PolicyQuoters (&ldquo;PolicyQuoters,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) collects, uses, shares, and protects information about consumers who use policyquoters.com (the &ldquo;Site&rdquo;) to compare life insurance quotes, complete applications, and connect with licensed insurance brokers and carriers. By using the Site, you agree to the practices described below.
+          </p>
+
+          <div className="prose prose-sm mt-8 max-w-none text-foreground prose-headings:font-semibold prose-headings:tracking-[-0.02em] prose-h2:text-xl prose-h2:mt-8 prose-h3:text-base prose-h3:mt-6 prose-p:leading-7 prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
+            <h2>1. Information We Collect</h2>
+            <p>We collect information you provide directly, information generated when you use the Site, and limited information from third parties such as brokers, carriers, marketing partners, and analytics providers.</p>
+
+            <h3>1.1 Quote, application, and contact information</h3>
+            <p>When you request a quote or submit an application, you may provide: full name, date of birth, gender, address and ZIP code, email address, phone number, employment status, household information, beneficiary details, requested coverage amount and term, policy preferences, and other underwriting-related answers.</p>
+
+            <h3>1.2 Sensitive insurance and health-related information</h3>
+            <p>Life insurance applications often involve sensitive information. Depending on the products you request, you may be asked to provide: tobacco and nicotine use, height and weight, medical history, prescription information, family medical history, lifestyle activities, driving history, military status, and other underwriting information. We treat this information as sensitive and use it only for the purposes described in this policy or as permitted by law.</p>
+
+            <h3>1.3 Account information</h3>
+            <p>If you create an account, we collect your username, password (stored in hashed form), saved quote progress, documents you upload, and account activity such as logins and preferences.</p>
+
+            <h3>1.4 Automatically collected information</h3>
+            <p>When you visit the Site we automatically collect: IP address, device and browser type, operating system, referring and exit pages, pages viewed, the date and time of access, and similar diagnostic data. We use cookies, pixels, local storage, and similar technologies to operate the Site, remember preferences, measure performance, and support marketing.</p>
+
+            <h3>1.5 Information from third parties</h3>
+            <p>We may receive information from licensed insurance brokers, carriers, lead and marketing partners, identity-verification providers, and publicly available sources. For example, a broker you choose may share status updates about an application you submitted through the Site.</p>
+
+            <h2>2. How We Use Information</h2>
+            <ul>
+              <li>Provide, operate, and improve the Site and quote experience.</li>
+              <li>Generate quotes, match you with licensed insurance brokers, and facilitate applications with carriers.</li>
+              <li>Verify identity, prevent fraud, and protect the security of the Site and our users.</li>
+              <li>Communicate with you about your quotes, applications, account, and customer support requests.</li>
+              <li>Send marketing communications about insurance products and related services, subject to your choices.</li>
+              <li>Measure and analyze how the Site is used, including through analytics services.</li>
+              <li>Comply with legal, regulatory, and contractual obligations, and to enforce our Terms.</li>
+            </ul>
+
+            <h2>3. How We Share Information</h2>
+            <p>We share personal information in the following circumstances:</p>
+            <ul>
+              <li><strong>Licensed insurance brokers and agents.</strong> When you request quotes or select a broker, we share the information needed to prepare quotes, follow up, and complete an application.</li>
+              <li><strong>Insurance carriers.</strong> When you submit an application, we share information with the relevant carrier(s) so they can underwrite and issue the policy.</li>
+              <li><strong>Service providers.</strong> We share information with vendors that host our infrastructure, send communications, provide analytics, verify identity, support customer service, or process payments. These providers are required to handle information consistently with this policy.</li>
+              <li><strong>Marketing partners.</strong> With your consent or as permitted by law, we may share contact information with vetted marketing partners that offer related insurance or financial products. You can opt out as described below.</li>
+              <li><strong>Legal, safety, and compliance.</strong> We may disclose information to comply with law or legal process, respond to lawful requests, protect rights and safety, and address fraud or security issues.</li>
+              <li><strong>Business transfers.</strong> If PolicyQuoters is involved in a merger, acquisition, financing, reorganization, or sale of assets, information may be transferred as part of that transaction.</li>
+            </ul>
+            <p>We do not sell sensitive insurance or health-related information for cross-context behavioral advertising.</p>
+
+            <h2>4. Cookies, Analytics, and Online Advertising</h2>
+            <p>We use cookies and similar technologies to keep you signed in, remember your quote progress, understand Site usage, and measure marketing performance. We may use third-party analytics services and advertising partners that set their own cookies and identifiers. You can control cookies through your browser settings. Disabling cookies may affect Site functionality.</p>
+            <p>Some browsers offer a &ldquo;Do Not Track&rdquo; signal. Because there is no consistent industry standard for responding to such signals, we currently do not respond to them, but we honor opt-out preference signals where required by applicable law.</p>
+
+            <h2>5. Security</h2>
+            <p>We use administrative, technical, and physical safeguards designed to protect personal information, including encryption in transit, restricted access, and monitoring. No system is perfectly secure, and we cannot guarantee absolute security. You are responsible for keeping your account credentials confidential.</p>
+
+            <h2>6. Data Retention</h2>
+            <p>We retain personal information for as long as needed to provide the services you request, comply with legal and regulatory requirements (including insurance recordkeeping requirements), resolve disputes, and enforce our agreements. Retention periods vary based on the type of information and the purpose for which it was collected. When information is no longer needed, we delete or de-identify it.</p>
+
+            <h2>7. Your Choices</h2>
+            <ul>
+              <li><strong>Marketing email.</strong> You can opt out of marketing emails by using the unsubscribe link in any message or by contacting us.</li>
+              <li><strong>Calls and texts.</strong> You can ask to be removed from marketing call or text lists by replying STOP to a text or by contacting us.</li>
+              <li><strong>Account information.</strong> Signed-in users can review and update certain account details at any time.</li>
+              <li><strong>Cookies.</strong> You can manage cookies through your browser. Some Site features depend on cookies.</li>
+            </ul>
+
+            <h2>8. State Privacy Rights</h2>
+            <p>Depending on where you live, you may have additional rights under state privacy laws (for example, California, Colorado, Connecticut, Virginia, Utah, Texas, Oregon, Montana, and similar laws). Those rights may include:</p>
+            <ul>
+              <li>Knowing what personal information we collect and how we use it.</li>
+              <li>Accessing or receiving a copy of your personal information.</li>
+              <li>Correcting inaccurate personal information.</li>
+              <li>Deleting personal information, subject to legal exceptions.</li>
+              <li>Opting out of certain sharing for targeted advertising, &ldquo;sales,&rdquo; or profiling that produces legal or similarly significant effects.</li>
+              <li>Limiting the use and disclosure of sensitive personal information.</li>
+              <li>Appealing a denial of a rights request.</li>
+            </ul>
+            <p>California residents may also request information about categories of personal information we collected, sold, or shared in the prior 12 months and the categories of recipients. To exercise any of these rights, contact us using the details below. We will verify requests before responding and will not discriminate against you for exercising your rights. You may designate an authorized agent to act on your behalf, subject to verification.</p>
+
+            <h2>9. Children&rsquo;s Privacy</h2>
+            <p>The Site is intended for adults. We do not knowingly collect personal information from children under 13 (or under 16 where required by law). If you believe a child has provided us with personal information, please contact us so we can delete it.</p>
+
+            <h2>10. International Users</h2>
+            <p>The Site is operated from the United States and is intended for U.S. residents. If you access the Site from outside the United States, your information will be processed in the United States, which may have different data protection laws than your jurisdiction.</p>
+
+            <h2>11. Third-Party Sites</h2>
+            <p>The Site may link to third-party websites, including broker and carrier sites. Those websites operate under their own privacy policies. We are not responsible for the privacy practices of third parties.</p>
+
+            <h2>12. Changes to This Policy</h2>
+            <p>We may update this Privacy Policy from time to time. When we do, we will revise the effective date above and, where appropriate, provide additional notice. Your continued use of the Site after the changes take effect means you accept the updated policy.</p>
+
+            <h2>13. How to Contact Us</h2>
+            <p>If you have questions about this Privacy Policy or want to exercise a privacy right, contact us at:</p>
+            <p>
+              <strong>PolicyQuoters</strong>
+              <br />
+              Email: <a href="mailto:privacy@policyquoters.com">privacy@policyquoters.com</a>
+              <br />
+              Website: <a href="https://www.policyquoters.com">www.policyquoters.com</a>
+            </p>
+            <p className="text-xs">This Privacy Policy is provided for general informational purposes and does not constitute legal advice. Specific obligations may vary based on your jurisdiction.</p>
+          </div>
+        </section>
+      </main>
+    </WebsiteShell>
   );
 }
 
