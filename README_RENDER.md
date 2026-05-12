@@ -17,7 +17,7 @@ In Render:
 | Setting | Value |
 | --- | --- |
 | Runtime | Node |
-| Build command | `npm ci && npm run build` |
+| Build command | `npm ci --include=dev && npm run build` |
 | Start command | `npm start` |
 | Health check path | `/healthz` |
 | Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/` |
