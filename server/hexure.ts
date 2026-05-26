@@ -3,6 +3,7 @@
 // Otherwise we return realistic mock quotes filtered to the landing page's carriers
 // so the funnel is fully testable today.
 import type { LandingPage, LandingQuoteAnswers, LandingQuoteOption } from "@shared/schema";
+import { findCarrierEntry } from "@shared/catalogs";
 
 type HexureCarrierResult = {
   carrier_name?: string;
@@ -43,9 +44,12 @@ function mockCarrierFactor(carrierName: string) {
 }
 
 function mockAmBestRating(carrierName: string) {
-  const seed = carrierName.charCodeAt(0) + carrierName.length;
-  const ratings = ["A++", "A+", "A", "A-"];
-  return ratings[seed % ratings.length];
+  // Prefer the published rating from the catalog when we recognize the carrier;
+  // unknown / custom carriers get a clearly-labeled placeholder so agents know
+  // the rating still needs validation.
+  const entry = findCarrierEntry(carrierName);
+  if (entry?.amBestRating) return entry.amBestRating;
+  return "Pending validation";
 }
 
 export function buildMockQuotes(page: LandingPage, answers: LandingQuoteAnswers): LandingQuoteOption[] {
@@ -114,6 +118,13 @@ export async function fetchHexureQuotes(page: LandingPage, answers: LandingQuote
   if (!baseUrl || !apiKey) return undefined;
 
   const allowedCarriers = page.licensedCarriers;
+  // Map names to known catalog codes where possible. Unknown carrier names are
+  // still sent (Hexure may map them, or it may return a soft warning that we
+  // surface to the caller).
+  const carrierRefs = allowedCarriers.map((name) => {
+    const entry = findCarrierEntry(name);
+    return entry ? { name, code: entry.code } : { name };
+  });
   const payload = {
     state: answers.state,
     age: answers.age,
@@ -122,6 +133,7 @@ export async function fetchHexureQuotes(page: LandingPage, answers: LandingQuote
     smoker: answers.smoker,
     health_class: answers.health,
     carriers: allowedCarriers,
+    carrier_refs: carrierRefs,
     term_lengths: [10, 20, 30],
   };
 
@@ -159,6 +171,24 @@ export async function fetchHexureQuotes(page: LandingPage, answers: LandingQuote
 }
 
 export function filterQuotesByLandingPage(options: LandingQuoteOption[], page: LandingPage): LandingQuoteOption[] {
-  const allowed = new Set(page.licensedCarriers.map((carrier) => carrier.toLowerCase()));
-  return options.filter((option) => allowed.has(option.carrierName.toLowerCase()));
+  const allowedNames = new Set<string>();
+  for (const carrier of page.licensedCarriers) {
+    allowedNames.add(carrier.toLowerCase());
+    const entry = findCarrierEntry(carrier);
+    if (entry) {
+      allowedNames.add(entry.name.toLowerCase());
+      allowedNames.add(entry.code.toLowerCase());
+      entry.aliases?.forEach((alias) => allowedNames.add(alias.toLowerCase()));
+    }
+  }
+  return options.filter((option) => {
+    const name = option.carrierName.toLowerCase();
+    if (allowedNames.has(name)) return true;
+    const entry = findCarrierEntry(option.carrierName);
+    if (entry) {
+      if (allowedNames.has(entry.name.toLowerCase())) return true;
+      if (allowedNames.has(entry.code.toLowerCase())) return true;
+    }
+    return false;
+  });
 }

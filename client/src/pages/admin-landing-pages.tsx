@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LandingLead, LandingPage, LandingPageInput } from "@shared/schema";
+import { CARRIER_CATALOG, US_STATES, findCarrierEntry, findStateOption } from "@shared/catalogs";
 
 type AgentSummary = {
   id: string;
@@ -121,6 +122,10 @@ export default function AdminLandingPages() {
   const [editingId, setEditingId] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [copiedSlug, setCopiedSlug] = useState<string | undefined>();
+  const [customStateInput, setCustomStateInput] = useState("");
+  const [customCarrierInput, setCustomCarrierInput] = useState("");
+  const [carrierSearch, setCarrierSearch] = useState("");
+  const [stateSearch, setStateSearch] = useState("");
 
   const { data: agents = [] } = useQuery<AgentSummary[]>({ queryKey: ["/api/admin/agents"] });
   const { data: pages = [], isLoading } = useQuery<LandingPage[]>({ queryKey: ["/api/admin/landing-pages"] });
@@ -226,21 +231,104 @@ export default function AdminLandingPages() {
     }
   };
 
-  const stateOptions = useMemo(() => {
-    const fromAgents = new Set<string>();
-    agents.forEach((agent) => agent.licenseStates.forEach((state) => fromAgents.add(state)));
-    selectedAgent?.licenseStates.forEach((state) => fromAgents.add(state));
-    form.licensedStates.forEach((state) => fromAgents.add(state));
-    return Array.from(fromAgents).sort();
+  const toggleState = (state: string) => {
+    const normalized = state.trim().toUpperCase();
+    if (!normalized) return;
+    setField(
+      "licensedStates",
+      form.licensedStates.includes(normalized)
+        ? form.licensedStates.filter((value) => value !== normalized)
+        : [...form.licensedStates, normalized],
+    );
+  };
+
+  const toggleCarrier = (carrier: string) => {
+    const normalized = carrier.trim();
+    if (!normalized) return;
+    setField(
+      "licensedCarriers",
+      form.licensedCarriers.includes(normalized)
+        ? form.licensedCarriers.filter((value) => value !== normalized)
+        : [...form.licensedCarriers, normalized],
+    );
+  };
+
+  const addCustomState = () => {
+    const raw = customStateInput.trim();
+    if (!raw) return;
+    const matched = findStateOption(raw);
+    const code = (matched?.code ?? raw).toUpperCase().slice(0, 2);
+    if (code.length !== 2 || !/^[A-Z]{2}$/.test(code)) {
+      setError("State must be a 2-letter code (or full state name).");
+      return;
+    }
+    if (!form.licensedStates.includes(code)) {
+      setField("licensedStates", [...form.licensedStates, code]);
+    }
+    setCustomStateInput("");
+    setError(undefined);
+  };
+
+  const addCustomCarrier = () => {
+    const raw = customCarrierInput.trim();
+    if (!raw) return;
+    const matched = findCarrierEntry(raw);
+    const displayName = matched?.name ?? raw;
+    if (displayName.length < 2) {
+      setError("Carrier name must be at least 2 characters.");
+      return;
+    }
+    if (!form.licensedCarriers.some((carrier) => carrier.toLowerCase() === displayName.toLowerCase())) {
+      setField("licensedCarriers", [...form.licensedCarriers, displayName]);
+    }
+    setCustomCarrierInput("");
+    setError(undefined);
+  };
+
+  // Preset state options. Includes the full US catalog (states + DC + territories),
+  // any state already saved on the page (so custom codes survive an edit), and any
+  // states the selected/known agents are licensed in.
+  const presetStates = useMemo(() => {
+    const codes = new Set<string>(US_STATES.map((option) => option.code));
+    agents.forEach((agent) => agent.licenseStates.forEach((state) => codes.add(state.toUpperCase())));
+    selectedAgent?.licenseStates.forEach((state) => codes.add(state.toUpperCase()));
+    form.licensedStates.forEach((state) => codes.add(state.toUpperCase()));
+    return Array.from(codes).sort();
   }, [agents, selectedAgent, form.licensedStates]);
 
-  const carrierOptions = useMemo(() => {
-    const fromAgents = new Set<string>();
-    agents.forEach((agent) => agent.carrierAppointments.forEach((carrier) => fromAgents.add(carrier)));
-    selectedAgent?.carrierAppointments.forEach((carrier) => fromAgents.add(carrier));
-    form.licensedCarriers.forEach((carrier) => fromAgents.add(carrier));
-    return Array.from(fromAgents).sort();
+  const filteredStates = useMemo(() => {
+    const query = stateSearch.trim().toLowerCase();
+    if (!query) return presetStates;
+    return presetStates.filter((code) => {
+      if (code.toLowerCase().includes(query)) return true;
+      const option = US_STATES.find((state) => state.code === code);
+      return option ? option.name.toLowerCase().includes(query) : false;
+    });
+  }, [presetStates, stateSearch]);
+
+  // Preset carriers: catalog + already-saved carriers + agent appointment lists.
+  const presetCarriers = useMemo(() => {
+    const map = new Map<string, { name: string; code?: string; rating?: string }>();
+    CARRIER_CATALOG.forEach((entry) => map.set(entry.name.toLowerCase(), { name: entry.name, code: entry.code, rating: entry.amBestRating }));
+    const addCarrier = (carrier: string) => {
+      const key = carrier.toLowerCase();
+      if (map.has(key)) return;
+      const matched = findCarrierEntry(carrier);
+      map.set(key, matched ? { name: matched.name, code: matched.code, rating: matched.amBestRating } : { name: carrier });
+    };
+    agents.forEach((agent) => agent.carrierAppointments.forEach(addCarrier));
+    selectedAgent?.carrierAppointments.forEach(addCarrier);
+    form.licensedCarriers.forEach(addCarrier);
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [agents, selectedAgent, form.licensedCarriers]);
+
+  const filteredCarriers = useMemo(() => {
+    const query = carrierSearch.trim().toLowerCase();
+    if (!query) return presetCarriers;
+    return presetCarriers.filter(
+      (carrier) => carrier.name.toLowerCase().includes(query) || (carrier.code?.toLowerCase().includes(query) ?? false),
+    );
+  }, [presetCarriers, carrierSearch]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_hsl(var(--primary)/0.12),_transparent_36rem),hsl(var(--background))] text-foreground">
@@ -337,31 +425,207 @@ export default function AdminLandingPages() {
                   <TextArea value={form.subheadline ?? ""} onChange={(value) => setField("subheadline", value)} placeholder="See real quotes from top-rated carriers in under a minute." testId="input-lp-subheadline" />
                 </Field>
 
-                <Field label="Licensed states" hint={selectedAgent ? `Pre-filled from ${selectedAgent.name}'s profile. Add or remove as needed.` : "Choose the states this landing page should accept."}>
-                  <div className="flex flex-wrap gap-2" data-testid="list-lp-states">
-                    {stateOptions.map((state) => (
-                      <Pill
-                        key={state}
-                        active={form.licensedStates.includes(state)}
-                        label={state}
-                        onClick={() => setField("licensedStates", form.licensedStates.includes(state) ? form.licensedStates.filter((value) => value !== state) : [...form.licensedStates, state])}
-                        testId={`button-state-${state}`}
+                <Field
+                  label="Licensed states"
+                  hint={
+                    selectedAgent
+                      ? `Pre-filled from ${selectedAgent.name}'s profile. Click to toggle, or add a custom code.`
+                      : "Click to toggle the states this landing page should accept, or add a custom code."
+                  }
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 rounded-xl border border-input bg-background px-3">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        value={stateSearch}
+                        onChange={(event) => setStateSearch(event.target.value)}
+                        placeholder="Search states by code or name"
+                        data-testid="input-state-search"
+                        className="h-10 w-full bg-transparent text-sm outline-none"
                       />
-                    ))}
+                      {stateSearch ? (
+                        <button
+                          type="button"
+                          onClick={() => setStateSearch("")}
+                          className="text-muted-foreground hover:text-foreground"
+                          data-testid="button-clear-state-search"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2" data-testid="list-lp-states">
+                      {filteredStates.map((state) => {
+                        const option = US_STATES.find((entry) => entry.code === state);
+                        return (
+                          <Pill
+                            key={state}
+                            active={form.licensedStates.includes(state)}
+                            label={option ? `${state} · ${option.name}` : state}
+                            onClick={() => toggleState(state)}
+                            testId={`button-state-${state}`}
+                          />
+                        );
+                      })}
+                      {filteredStates.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No matches. Add it manually below.</p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex-1 min-w-[180px]">
+                        <span className="mb-1 block text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Add a custom state</span>
+                        <input
+                          value={customStateInput}
+                          onChange={(event) => setCustomStateInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addCustomState();
+                            }
+                          }}
+                          placeholder="e.g. NY or New York"
+                          data-testid="input-custom-state"
+                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={addCustomState}
+                        disabled={!customStateInput.trim()}
+                        data-testid="button-add-custom-state"
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Add state
+                      </Button>
+                    </div>
+                    {form.licensedStates.length > 0 ? (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Selected ({form.licensedStates.length})</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5" data-testid="list-lp-selected-states">
+                          {form.licensedStates.map((state) => (
+                            <span
+                              key={state}
+                              className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                            >
+                              {state}
+                              <button
+                                type="button"
+                                onClick={() => toggleState(state)}
+                                aria-label={`Remove ${state}`}
+                                data-testid={`button-remove-state-${state}`}
+                                className="rounded-full p-0.5 hover:bg-primary-foreground/20"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </Field>
 
-                <Field label="Licensed carriers" hint="Quotes will be limited to these carriers.">
-                  <div className="flex flex-wrap gap-2" data-testid="list-lp-carriers">
-                    {carrierOptions.map((carrier) => (
-                      <Pill
-                        key={carrier}
-                        active={form.licensedCarriers.includes(carrier)}
-                        label={carrier}
-                        onClick={() => setField("licensedCarriers", form.licensedCarriers.includes(carrier) ? form.licensedCarriers.filter((value) => value !== carrier) : [...form.licensedCarriers, carrier])}
-                        testId={`button-carrier-${carrier.replace(/\s+/g, "-")}`}
+                <Field
+                  label="Carrier catalog"
+                  hint="Add or select the carriers this agent is licensed with. Final Hexure availability is validated when sandbox credentials are connected."
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 rounded-xl border border-input bg-background px-3">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        value={carrierSearch}
+                        onChange={(event) => setCarrierSearch(event.target.value)}
+                        placeholder="Search carriers by name"
+                        data-testid="input-carrier-search"
+                        className="h-10 w-full bg-transparent text-sm outline-none"
                       />
-                    ))}
+                      {carrierSearch ? (
+                        <button
+                          type="button"
+                          onClick={() => setCarrierSearch("")}
+                          className="text-muted-foreground hover:text-foreground"
+                          data-testid="button-clear-carrier-search"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div
+                      className="max-h-72 overflow-y-auto rounded-2xl border border-border bg-card p-2"
+                      data-testid="list-lp-carriers"
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        {filteredCarriers.map((carrier) => (
+                          <Pill
+                            key={carrier.name}
+                            active={form.licensedCarriers.some((value) => value.toLowerCase() === carrier.name.toLowerCase())}
+                            label={carrier.name}
+                            onClick={() => toggleCarrier(carrier.name)}
+                            testId={`button-carrier-${carrier.code ?? carrier.name.replace(/\s+/g, "-")}`}
+                          />
+                        ))}
+                        {filteredCarriers.length === 0 ? (
+                          <p className="px-2 py-3 text-xs text-muted-foreground">
+                            No carriers match &quot;{carrierSearch}&quot;. Add a custom carrier below.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex-1 min-w-[200px]">
+                        <span className="mb-1 block text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Add a custom carrier</span>
+                        <input
+                          value={customCarrierInput}
+                          onChange={(event) => setCustomCarrierInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addCustomCarrier();
+                            }
+                          }}
+                          placeholder="e.g. Acme Life"
+                          data-testid="input-custom-carrier"
+                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={addCustomCarrier}
+                        disabled={!customCarrierInput.trim()}
+                        data-testid="button-add-custom-carrier"
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Add carrier
+                      </Button>
+                    </div>
+                    {form.licensedCarriers.length > 0 ? (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Selected ({form.licensedCarriers.length})</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5" data-testid="list-lp-selected-carriers">
+                          {form.licensedCarriers.map((carrier) => (
+                            <span
+                              key={carrier}
+                              className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                            >
+                              {carrier}
+                              <button
+                                type="button"
+                                onClick={() => toggleCarrier(carrier)}
+                                aria-label={`Remove ${carrier}`}
+                                data-testid={`button-remove-carrier-${carrier.replace(/\s+/g, "-")}`}
+                                className="rounded-full p-0.5 hover:bg-primary-foreground/20"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </Field>
 
