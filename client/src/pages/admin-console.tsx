@@ -380,6 +380,9 @@ export default function AdminConsole() {
             <Badge variant="secondary" className="rounded-full">
               Internal MVP
             </Badge>
+            <Button asChild variant="outline" className="rounded-full" data-testid="button-open-landing-pages">
+              <Link href="/admin/landing-pages">Landing pages</Link>
+            </Button>
             <Button asChild variant="outline" className="rounded-full" data-testid="button-open-agent-portal">
               <Link href="/agent">Agent portal</Link>
             </Button>

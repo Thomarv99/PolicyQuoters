@@ -6,6 +6,9 @@ import {
   agentProfileSchema,
   agentStatusUpdateSchema,
   assignmentRequestSchema,
+  landingPageSchema,
+  landingQuoteRequestSchema,
+  landingSelectionSchema,
   quoteRequestSchema,
   type AgentCase,
   type AgentProductLine,
@@ -15,11 +18,28 @@ import {
   type AdminAssignmentCase,
   type AdminAssignmentDashboard,
   type AssignmentResponse,
+  type LandingQuoteOption,
+  type LandingQuoteResponse,
   type RoutingCandidate,
   type QuoteOption,
   type QuoteRequest,
   type QuoteResponse,
 } from "@shared/schema";
+import {
+  createLandingPage,
+  deleteLandingPage,
+  getLandingPageBySlug,
+  getSubmission,
+  listAllLeads,
+  listLandingPages,
+  listLeadsForAgent,
+  publicLandingPage,
+  recordSubmission,
+  seedLandingPages,
+  selectQuote,
+  updateLandingPage,
+} from "./landing-pages";
+import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from "./hexure";
 
 const carriers = [
   { id: "banner-life", name: "Banner Life", rating: "A+", term: 0.9, permanent: 1.04, conversion: "Convertible through year 20" },
@@ -637,8 +657,151 @@ function caseFromAssignment(assignment: AssignmentResponse, request: { intake: A
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  seedLandingPages(
+    agentDirectory.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      phone: agent.phone,
+      email: agent.email,
+      agency: agent.agency,
+      licenseStates: agent.licenseStates,
+      carrierAppointments: agent.carrierAppointments,
+    })),
+  );
+
   app.get("/healthz", (_req, res) => {
     return res.status(200).json({ status: "ok" });
+  });
+
+  app.get("/api/admin/agents", (_req, res) => {
+    return res.json(
+      agentDirectory.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        agency: agent.agency,
+        email: agent.email,
+        phone: agent.phone,
+        licenseStates: agent.licenseStates,
+        carrierAppointments: agent.carrierAppointments,
+      })),
+    );
+  });
+
+  app.get("/api/admin/landing-pages", (_req, res) => {
+    return res.json(listLandingPages());
+  });
+
+  app.post("/api/admin/landing-pages", (req, res) => {
+    const parsed = landingPageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
+    }
+    try {
+      const created = createLandingPage(parsed.data);
+      return res.status(201).json(created);
+    } catch (error) {
+      return res.status(409).json({ message: (error as Error).message });
+    }
+  });
+
+  app.put("/api/admin/landing-pages/:id", (req, res) => {
+    const parsed = landingPageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
+    }
+    try {
+      const updated = updateLandingPage(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ message: "Landing page not found" });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(409).json({ message: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/admin/landing-pages/:id", (req, res) => {
+    const deleted = deleteLandingPage(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Landing page not found" });
+    return res.status(204).end();
+  });
+
+  app.get("/api/landing-pages/:slug", (req, res) => {
+    const page = getLandingPageBySlug(req.params.slug);
+    if (!page || !page.active) {
+      return res.status(404).json({ message: "Landing page not found" });
+    }
+    return res.json(publicLandingPage(page));
+  });
+
+  app.post("/api/landing-quotes", async (req, res) => {
+    const parsed = landingQuoteRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid quote request", issues: parsed.error.issues });
+    }
+    const { slug, answers, contact } = parsed.data;
+    const page = getLandingPageBySlug(slug);
+    if (!page || !page.active) {
+      return res.status(404).json({ message: "Landing page not found" });
+    }
+    if (!page.licensedStates.map((state) => state.toUpperCase()).includes(answers.state.toUpperCase())) {
+      return res.status(422).json({
+        message: `The agent on this page is not licensed in ${answers.state}.`,
+        allowedStates: page.licensedStates,
+      });
+    }
+
+    const hexure = await fetchHexureQuotes(page, answers);
+    const source: "hexure" | "mock" = hexure && hexure.length > 0 ? "hexure" : "mock";
+    const raw: LandingQuoteOption[] = source === "hexure" ? hexure! : buildMockQuotes(page, answers);
+    const filtered = filterQuotesByLandingPage(raw, page)
+      .sort((a, b) => a.monthlyPremium - b.monthlyPremium)
+      .slice(0, 9);
+
+    const submission = recordSubmission({
+      landingPageId: page.id,
+      contact,
+      answers,
+      options: filtered,
+      source,
+    });
+
+    const response: LandingQuoteResponse = {
+      requestId: `LPQ-${Date.now().toString(36).toUpperCase()}`,
+      submissionId: submission.id,
+      source,
+      options: filtered,
+      landingPage: publicLandingPage(page),
+    };
+    return res.json(response);
+  });
+
+  app.post("/api/landing-quotes/select", (req, res) => {
+    const parsed = landingSelectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid selection", issues: parsed.error.issues });
+    }
+    const submission = getSubmission(parsed.data.submissionId);
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+    const lead = selectQuote(parsed.data.submissionId, parsed.data.selectedQuoteId);
+    if (!lead) {
+      return res.status(404).json({ message: "Selected quote not found" });
+    }
+    return res.status(201).json({
+      leadId: lead.id,
+      agentDisplayName: lead.agentDisplayName,
+      landingPageName: lead.landingPageName,
+      selectedQuote: lead.selectedQuote,
+    });
+  });
+
+  app.get("/api/admin/leads", (_req, res) => {
+    return res.json(listAllLeads());
+  });
+
+  app.get("/api/agent/leads", (req, res) => {
+    const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
+    return res.json(listLeadsForAgent(agentId));
   });
 
   app.get("/api/agent/profile", (_req, res) => {

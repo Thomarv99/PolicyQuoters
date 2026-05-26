@@ -225,3 +225,124 @@ export type AdminAssignmentDashboard = {
     potentialFees: number;
   };
 };
+
+export const landingPageHealthOptions = ["excellent", "great", "good", "fair", "poor"] as const;
+export const landingPageHealthSchema = z.enum(landingPageHealthOptions);
+
+export const landingPageSchema = z.object({
+  name: z.string().min(2),
+  slug: z
+    .string()
+    .min(2)
+    .max(64)
+    .regex(/^[a-z0-9-]+$/i, "Slug must use letters, numbers, or dashes only"),
+  agentId: z.string().min(2),
+  agentDisplayName: z.string().min(2),
+  agentDisplayTitle: z.string().optional(),
+  agentPhone: z.string().optional(),
+  agentEmail: z.string().email().optional().or(z.literal("")),
+  licensedStates: z.array(z.string().min(2).max(2)).min(1),
+  licensedCarriers: z.array(z.string().min(2)).min(1),
+  headline: z.string().optional(),
+  subheadline: z.string().optional(),
+  active: z.boolean(),
+});
+
+export type LandingPageInput = z.infer<typeof landingPageSchema>;
+
+export type LandingPage = LandingPageInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LandingPagePublic = {
+  id: string;
+  slug: string;
+  name: string;
+  headline?: string;
+  subheadline?: string;
+  active: boolean;
+  agent: {
+    displayName: string;
+    title?: string;
+  };
+  licensedStates: string[];
+  licensedCarriers: string[];
+};
+
+export const landingQuoteAnswersSchema = z.object({
+  ageRange: z.string().min(1).optional(),
+  age: z.number().min(18).max(85),
+  gender: z.enum(["female", "male"]),
+  state: z.string().min(2).max(2),
+  coverageAmount: z.number().min(25_000).max(2_000_000),
+  smoker: z.boolean(),
+  health: landingPageHealthSchema,
+});
+
+export const landingContactSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().min(10),
+  zip: z.string().min(5).max(10).optional(),
+  consent: z.literal(true),
+});
+
+export const landingQuoteRequestSchema = z.object({
+  slug: z.string().min(2),
+  answers: landingQuoteAnswersSchema,
+  contact: landingContactSchema,
+});
+
+export type LandingQuoteAnswers = z.infer<typeof landingQuoteAnswersSchema>;
+export type LandingContact = z.infer<typeof landingContactSchema>;
+export type LandingQuoteRequest = z.infer<typeof landingQuoteRequestSchema>;
+
+export type LandingQuoteOption = {
+  quoteId: string;
+  carrierName: string;
+  productName: string;
+  productType: string;
+  coverageAmount: number;
+  termLength: number;
+  monthlyPremium: number;
+  annualPremium: number;
+  amBestRating?: string;
+  source: "hexure" | "mock";
+  highlights: string[];
+};
+
+export type LandingQuoteResponse = {
+  requestId: string;
+  submissionId: string;
+  source: "hexure" | "mock";
+  options: LandingQuoteOption[];
+  landingPage: LandingPagePublic;
+};
+
+export const landingSelectionSchema = z.object({
+  submissionId: z.string().min(2),
+  selectedQuoteId: z.string().min(2),
+});
+
+export type LandingSelectionRequest = z.infer<typeof landingSelectionSchema>;
+
+export type LandingLead = {
+  id: string;
+  submissionId: string;
+  landingPageId: string;
+  landingPageSlug: string;
+  landingPageName: string;
+  agentId: string;
+  agentDisplayName: string;
+  contact: LandingContact;
+  answers: LandingQuoteAnswers;
+  options: LandingQuoteOption[];
+  selectedQuote?: LandingQuoteOption;
+  status: "new" | "selected" | "contacted" | "closed";
+  source: "hexure" | "mock";
+  createdAt: string;
+  updatedAt: string;
+};

@@ -20,9 +20,32 @@ In Render:
 | Build command | `npm ci --include=dev && npm run build` |
 | Start command | `npm start` |
 | Health check path | `/healthz` |
-| Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/` |
+| Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/` (plus the Hexure / Supabase vars below if you want live data) |
 
 The included `render.yaml` can also be used as a Render Blueprint.
+
+### Hexure Sandbox Quoting API (optional in MVP)
+
+The landing-page quote endpoint calls Hexure when these are set, and falls back to in-memory sandbox quotes filtered by each landing page's carriers otherwise. Add these in Render → **Environment** when you are ready to flip from mock to real quotes.
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `HEXURE_API_BASE_URL` | Yes (for live quotes) | e.g. `https://sandbox.hexure.com/api/v1` |
+| `HEXURE_API_KEY` | Yes (for live quotes) | Issued by Hexure for the sandbox account |
+| `HEXURE_ACCOUNT_ID` | Optional | Sent as `X-Hexure-Account` header if present |
+| `HEXURE_ENV` | Optional | `sandbox` (default) or `production` |
+
+When neither base URL nor key is set, the server logs `[hexure] ...` warnings and uses the built-in mock generator, so the funnel stays usable for ad-traffic testing today.
+
+### Production persistence (Supabase)
+
+The MVP landing-page builder, consumer submissions, and lead/assignment records currently use an in-process in-memory store (see `server/landing-pages.ts`). For production on Render, swap to Supabase (or another managed database) using:
+
+| Variable | Required |
+| --- | --- |
+| `SUPABASE_URL` | Yes (for production) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes (server-side only) |
+| `SUPABASE_ANON_KEY` | Optional (only if reading from client) |
 
 ## 3. Add the custom domain
 

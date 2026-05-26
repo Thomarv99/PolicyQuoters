@@ -7,7 +7,10 @@ import NotFound from "@/pages/not-found";
 import MobileMvp from "@/pages/mobile-mvp";
 import AgentPortal from "@/pages/agent-portal";
 import AgentOnboarding from "@/pages/agent-onboarding";
+import AgentLeads from "@/pages/agent-leads";
 import AdminConsole from "@/pages/admin-console";
+import AdminLandingPages from "@/pages/admin-landing-pages";
+import LandingPageView from "@/pages/landing-page";
 import { BrokerProfilePage, DirectoryPage, LoginPage, PrivacyPolicyPage, PublicHome, QuotesPage } from "@/pages/website";
 
 function routerBase() {
@@ -31,7 +34,10 @@ function AppRouter() {
       <Route path="/app" component={MobileMvp} />
       <Route path="/agent" component={AgentPortal} />
       <Route path="/agent/onboarding" component={AgentOnboarding} />
+      <Route path="/agent/leads" component={AgentLeads} />
       <Route path="/admin" component={AdminConsole} />
+      <Route path="/admin/landing-pages" component={AdminLandingPages} />
+      <Route path="/lp/:slug" component={LandingPageView} />
       <Route component={NotFound} />
     </Switch>
   );
