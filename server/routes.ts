@@ -9,6 +9,7 @@ import {
   landingPageSchema,
   landingQuoteRequestSchema,
   landingSelectionSchema,
+  manualAgentInputSchema,
   quoteRequestSchema,
   type AgentCase,
   type AgentProductLine,
@@ -748,6 +749,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         carrierAppointments: agent.carrierAppointments,
       })),
     );
+  });
+
+  app.post("/api/admin/agents", async (req, res) => {
+    const parsed = manualAgentInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid agent", issues: parsed.error.issues });
+    }
+    const input = parsed.data;
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const duplicate = agentDirectory.find((agent) => agent.email.trim().toLowerCase() === normalizedEmail);
+    if (duplicate) {
+      return res.status(409).json({
+        message: `An agent with email "${input.email}" already exists.`,
+        agentId: duplicate.id,
+      });
+    }
+
+    const slugSource = input.name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 20) || "AGENT";
+    let candidateId = `AGENT-${slugSource}`;
+    let suffix = 1;
+    while (agentDirectory.some((agent) => agent.id === candidateId)) {
+      suffix += 1;
+      candidateId = `AGENT-${slugSource}-${suffix}`;
+    }
+
+    const newAgent: AgentDirectoryProfile = {
+      id: candidateId,
+      name: input.name.trim(),
+      agency: input.agency.trim(),
+      npn: "PENDING",
+      email: input.email.trim(),
+      phone: input.phone.trim(),
+      licenseStates: Array.from(new Set(input.licenseStates.map((state) => state.toUpperCase()))),
+      carrierAppointments: Array.from(new Set(input.carrierAppointments.map((carrier) => carrier.trim()))).filter((carrier) => carrier.length > 0),
+      productLines: ["term-life"],
+      weeklyCapacity: 10,
+      acceptsInstantAssignments: false,
+      paymentMethod: { brand: "Pending", last4: "0000", status: "not-added" },
+      agreementAccepted: false,
+      feeAuthorizationAccepted: false,
+      performanceScore: 80,
+      declineRate: 0,
+      activeAssignments: 0,
+    };
+
+    agentDirectory.push(newAgent);
+    try {
+      await saveAgentDirectory([newAgent]);
+    } catch (error) {
+      console.error("[persistence] Failed to save new manual agent:", (error as Error).message);
+      // Continue with in-memory entry even if DB save failed.
+    }
+
+    return res.status(201).json({
+      id: newAgent.id,
+      name: newAgent.name,
+      agency: newAgent.agency,
+      email: newAgent.email,
+      phone: newAgent.phone,
+      licenseStates: newAgent.licenseStates,
+      carrierAppointments: newAgent.carrierAppointments,
+      displayTitle: input.displayTitle?.trim() || undefined,
+    });
   });
 
   app.get("/api/admin/landing-pages", async (_req, res, next) => {

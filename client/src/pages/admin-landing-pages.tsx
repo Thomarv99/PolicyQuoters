@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +118,22 @@ function publicUrl(slug: string) {
   return `${window.location.origin}/lp/${slug}`;
 }
 
+type ManualAgentDraft = {
+  name: string;
+  agency: string;
+  email: string;
+  phone: string;
+  displayTitle: string;
+};
+
+const emptyManualAgent: ManualAgentDraft = {
+  name: "",
+  agency: "",
+  email: "",
+  phone: "",
+  displayTitle: "",
+};
+
 export default function AdminLandingPages() {
   const [form, setForm] = useState<LandingPageInput>(emptyForm);
   const [editingId, setEditingId] = useState<string | undefined>();
@@ -127,6 +143,8 @@ export default function AdminLandingPages() {
   const [customCarrierInput, setCustomCarrierInput] = useState("");
   const [carrierSearch, setCarrierSearch] = useState("");
   const [stateSearch, setStateSearch] = useState("");
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [manualAgent, setManualAgent] = useState<ManualAgentDraft>(emptyManualAgent);
 
   const { data: agents = [] } = useQuery<AgentSummary[]>({ queryKey: ["/api/admin/agents"] });
   const { data: pages = [], isLoading } = useQuery<LandingPage[]>({ queryKey: ["/api/admin/landing-pages"] });
@@ -142,10 +160,39 @@ export default function AdminLandingPages() {
     setForm(emptyForm);
     setEditingId(undefined);
     setError(undefined);
+    setCreatingAgent(false);
+    setManualAgent(emptyManualAgent);
+  };
+
+  const setManualField = <K extends keyof ManualAgentDraft>(key: K, value: ManualAgentDraft[K]) => {
+    setManualAgent((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const startManualAgent = () => {
+    setCreatingAgent(true);
+    setManualAgent(emptyManualAgent);
+    setError(undefined);
+    setForm((prev) => ({
+      ...prev,
+      agentId: "",
+      agentDisplayName: "",
+      agentDisplayTitle: "",
+      agentPhone: "",
+      agentEmail: "",
+    }));
+  };
+
+  const cancelManualAgent = () => {
+    setCreatingAgent(false);
+    setManualAgent(emptyManualAgent);
+    setError(undefined);
   };
 
   const startEdit = (page: LandingPage) => {
     setEditingId(page.id);
+    setCreatingAgent(false);
+    setManualAgent(emptyManualAgent);
+    setError(undefined);
     setForm({
       name: page.name,
       slug: page.slug,
@@ -178,17 +225,32 @@ export default function AdminLandingPages() {
     }));
   };
 
+  const createAgentMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      agency: string;
+      email: string;
+      phone: string;
+      displayTitle?: string;
+      licenseStates: string[];
+      carrierAppointments: string[];
+    }) => {
+      const res = await apiRequest("POST", "/api/admin/agents", payload);
+      return (await res.json()) as AgentSummary & { displayTitle?: string };
+    },
+  });
+
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (source: LandingPageInput) => {
       const payload: LandingPageInput = {
-        ...form,
-        slug: slugify(form.slug || form.name),
-        agentDisplayTitle: form.agentDisplayTitle || undefined,
-        agentPhone: form.agentPhone || undefined,
-        agentEmail: form.agentEmail || undefined,
-        headline: form.headline || undefined,
-        subheadline: form.subheadline || undefined,
-        metaPixelId: form.metaPixelId?.trim() || undefined,
+        ...source,
+        slug: slugify(source.slug || source.name),
+        agentDisplayTitle: source.agentDisplayTitle || undefined,
+        agentPhone: source.agentPhone || undefined,
+        agentEmail: source.agentEmail || undefined,
+        headline: source.headline || undefined,
+        subheadline: source.subheadline || undefined,
+        metaPixelId: source.metaPixelId?.trim() || undefined,
       };
       const url = editingId ? `/api/admin/landing-pages/${editingId}` : "/api/admin/landing-pages";
       const method = editingId ? "PUT" : "POST";
@@ -214,11 +276,15 @@ export default function AdminLandingPages() {
     },
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(undefined);
-    if (!form.name.trim() || !form.agentId || form.licensedCarriers.length === 0 || form.licensedStates.length === 0) {
-      setError("Name, agent, at least one state, and at least one carrier are required.");
+    if (!form.name.trim() || form.licensedCarriers.length === 0 || form.licensedStates.length === 0) {
+      setError("Page name, at least one state, and at least one carrier are required.");
+      return;
+    }
+    if (!creatingAgent && !form.agentId) {
+      setError("Pick an existing agent or add a new agent manually.");
       return;
     }
     const pixel = form.metaPixelId?.trim();
@@ -226,7 +292,55 @@ export default function AdminLandingPages() {
       setError("Meta Pixel ID must be 6-20 digits (or leave blank to use the global pixel).");
       return;
     }
-    saveMutation.mutate();
+
+    if (creatingAgent) {
+      if (
+        !manualAgent.name.trim() ||
+        !manualAgent.agency.trim() ||
+        !manualAgent.email.trim() ||
+        !manualAgent.phone.trim()
+      ) {
+        setError("New agent requires name, agency, email, and phone.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualAgent.email.trim())) {
+        setError("New agent email is not valid.");
+        return;
+      }
+      try {
+        const created = await createAgentMutation.mutateAsync({
+          name: manualAgent.name.trim(),
+          agency: manualAgent.agency.trim(),
+          email: manualAgent.email.trim(),
+          phone: manualAgent.phone.trim(),
+          displayTitle: manualAgent.displayTitle.trim() || undefined,
+          licenseStates: form.licensedStates,
+          carrierAppointments: form.licensedCarriers,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["/api/admin/agents"] });
+        const nextForm: LandingPageInput = {
+          ...form,
+          agentId: created.id,
+          agentDisplayName: form.agentDisplayName.trim() || created.name,
+          agentDisplayTitle:
+            form.agentDisplayTitle?.trim() ||
+            manualAgent.displayTitle.trim() ||
+            `Licensed agent · ${created.agency}`,
+          agentPhone: form.agentPhone?.trim() || created.phone,
+          agentEmail: form.agentEmail?.trim() || created.email,
+        };
+        setForm(nextForm);
+        setCreatingAgent(false);
+        setManualAgent(emptyManualAgent);
+        saveMutation.mutate(nextForm);
+        return;
+      } catch (err) {
+        setError((err as Error).message || "Could not create the new agent.");
+        return;
+      }
+    }
+
+    saveMutation.mutate(form);
   };
 
   const copyUrl = async (slug: string) => {
@@ -394,19 +508,105 @@ export default function AdminLandingPages() {
                   </Field>
                 </div>
 
-                <Field label="Assigned agent">
-                  <select
-                    value={form.agentId}
-                    onChange={(event) => pickAgent(event.target.value)}
-                    data-testid="select-lp-agent"
-                    className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">Select an agent</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>{agent.name} · {agent.agency}</option>
-                    ))}
-                  </select>
-                </Field>
+                <div className="space-y-3">
+                  {!creatingAgent ? (
+                    <>
+                      <Field label="Assigned agent">
+                        <select
+                          value={form.agentId}
+                          onChange={(event) => pickAgent(event.target.value)}
+                          data-testid="select-lp-agent"
+                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="">Select an agent</option>
+                          {agents.map((agent) => (
+                            <option key={agent.id} value={agent.id}>{agent.name} · {agent.agency}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={startManualAgent}
+                        data-testid="button-add-new-agent"
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Add new agent manually
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="space-y-3 rounded-2xl border border-primary/40 bg-primary/5 p-3" data-testid="section-manual-agent">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">Add a new agent</p>
+                          <p className="text-xs text-muted-foreground">
+                            Fill in the agent's details. They will be saved to the agent directory and selected for this landing page.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={cancelManualAgent}
+                          data-testid="button-cancel-manual-agent"
+                        >
+                          <X className="mr-1 h-4 w-4" />
+                          Cancel
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Agent name">
+                          <TextInput
+                            value={manualAgent.name}
+                            onChange={(value) => setManualField("name", value)}
+                            placeholder="Casey Rivera"
+                            testId="input-manual-agent-name"
+                          />
+                        </Field>
+                        <Field label="Agency">
+                          <TextInput
+                            value={manualAgent.agency}
+                            onChange={(value) => setManualField("agency", value)}
+                            placeholder="Rivera Family Insurance"
+                            testId="input-manual-agent-agency"
+                          />
+                        </Field>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Email">
+                          <TextInput
+                            value={manualAgent.email}
+                            onChange={(value) => setManualField("email", value)}
+                            placeholder="casey@example.com"
+                            type="email"
+                            testId="input-manual-agent-email"
+                          />
+                        </Field>
+                        <Field label="Phone">
+                          <TextInput
+                            value={manualAgent.phone}
+                            onChange={(value) => setManualField("phone", value)}
+                            placeholder="(800) 555-0100"
+                            testId="input-manual-agent-phone"
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Display title (optional)" hint="Shown on the landing page hero. Defaults to 'Licensed agent · <agency>'.">
+                        <TextInput
+                          value={manualAgent.displayTitle}
+                          onChange={(value) => setManualField("displayTitle", value)}
+                          placeholder="Licensed agent · Rivera Family Insurance"
+                          testId="input-manual-agent-title"
+                        />
+                      </Field>
+                      <p className="text-xs text-muted-foreground">
+                        Licensed states and carrier appointments are taken from the selections below. Add at least one of each before saving.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Agent display name">
@@ -663,9 +863,22 @@ export default function AdminLandingPages() {
                 {error ? <p className="text-sm text-destructive" data-testid="text-lp-error">{error}</p> : null}
 
                 <div className="flex flex-wrap gap-2">
-                  <Button type="submit" className="rounded-full" disabled={saveMutation.isPending} data-testid="button-save-lp">
-                    {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                    {editingId ? "Update landing page" : "Create landing page"}
+                  <Button
+                    type="submit"
+                    className="rounded-full"
+                    disabled={saveMutation.isPending || createAgentMutation.isPending}
+                    data-testid="button-save-lp"
+                  >
+                    {saveMutation.isPending || createAgentMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    {editingId
+                      ? "Update landing page"
+                      : creatingAgent
+                        ? "Create agent and landing page"
+                        : "Create landing page"}
                   </Button>
                   {editingId ? (
                     <Button type="button" variant="outline" className="rounded-full" onClick={resetForm} data-testid="button-cancel-lp">Cancel</Button>

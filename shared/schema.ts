@@ -72,6 +72,18 @@ export const agentProfileSchema = z.object({
   feeAuthorizationAccepted: z.boolean(),
 });
 
+export const manualAgentInputSchema = z.object({
+  name: z.string().min(2, "Agent name is required"),
+  agency: z.string().min(2, "Agency is required"),
+  email: z.string().email("Valid email required"),
+  phone: z.string().min(7, "Phone is required"),
+  displayTitle: z.string().optional(),
+  licenseStates: z.array(z.string().min(2).max(2)).min(1, "Add at least one licensed state"),
+  carrierAppointments: z.array(z.string().min(2)).min(1, "Add at least one carrier appointment"),
+});
+
+export type ManualAgentInput = z.infer<typeof manualAgentInputSchema>;
+
 export const adminAssignAgentSchema = z.object({
   agentId: z.string().min(2),
   reason: z.string().optional(),
