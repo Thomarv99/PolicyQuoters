@@ -33,6 +33,7 @@ const emptyForm: LandingPageInput = {
   headline: "",
   subheadline: "",
   active: true,
+  metaPixelId: "",
 };
 
 function Logo() {
@@ -158,6 +159,7 @@ export default function AdminLandingPages() {
       headline: page.headline ?? "",
       subheadline: page.subheadline ?? "",
       active: page.active,
+      metaPixelId: page.metaPixelId ?? "",
     });
   };
 
@@ -186,6 +188,7 @@ export default function AdminLandingPages() {
         agentEmail: form.agentEmail || undefined,
         headline: form.headline || undefined,
         subheadline: form.subheadline || undefined,
+        metaPixelId: form.metaPixelId?.trim() || undefined,
       };
       const url = editingId ? `/api/admin/landing-pages/${editingId}` : "/api/admin/landing-pages";
       const method = editingId ? "PUT" : "POST";
@@ -216,6 +219,11 @@ export default function AdminLandingPages() {
     setError(undefined);
     if (!form.name.trim() || !form.agentId || form.licensedCarriers.length === 0 || form.licensedStates.length === 0) {
       setError("Name, agent, at least one state, and at least one carrier are required.");
+      return;
+    }
+    const pixel = form.metaPixelId?.trim();
+    if (pixel && !/^\d{6,20}$/.test(pixel)) {
+      setError("Meta Pixel ID must be 6-20 digits (or leave blank to use the global pixel).");
       return;
     }
     saveMutation.mutate();
@@ -423,6 +431,18 @@ export default function AdminLandingPages() {
                 </Field>
                 <Field label="Subheadline (optional)">
                   <TextArea value={form.subheadline ?? ""} onChange={(value) => setField("subheadline", value)} placeholder="See real quotes from top-rated carriers in under a minute." testId="input-lp-subheadline" />
+                </Field>
+
+                <Field
+                  label="Meta Pixel ID (optional · advanced)"
+                  hint="Override the global VITE_META_PIXEL_ID for this page. Leave blank to use the site-wide pixel (if configured). 6-20 digit numeric ID."
+                >
+                  <TextInput
+                    value={form.metaPixelId ?? ""}
+                    onChange={(value) => setField("metaPixelId", value.replace(/[^0-9]/g, ""))}
+                    placeholder="e.g. 1234567890123456"
+                    testId="input-lp-meta-pixel-id"
+                  />
                 </Field>
 
                 <Field

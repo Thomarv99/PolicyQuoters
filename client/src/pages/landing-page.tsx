@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useRoute } from "wouter";
 import { ArrowLeft, ArrowRight, BadgeCheck, CheckCircle2, Loader2, ShieldCheck, Sparkles } from "lucide-react";
@@ -6,6 +6,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  coverageTier,
+  initMetaPixel,
+  newEventId,
+  trackCustomEvent,
+  trackStandardEvent,
+} from "@/lib/meta-pixel";
 import type {
   LandingContact,
   LandingPagePublic,
@@ -296,7 +303,48 @@ export default function LandingPageView() {
     }
   }, [slug]);
 
+  const pagePixelId = landingPage?.metaPixelId;
+  const viewContentSentRef = useRef(false);
+  const quoteStartedSentRef = useRef(false);
+  const eventIdsRef = useRef<{ lead?: string; quotesGenerated?: string; quoteSelected?: string }>({});
+
+  useEffect(() => {
+    if (!landingPage) return;
+    initMetaPixel(pagePixelId);
+    if (viewContentSentRef.current) return;
+    viewContentSentRef.current = true;
+    trackStandardEvent(
+      "ViewContent",
+      {
+        content_category: "landing_page",
+        content_name: landingPage.name,
+        landing_page_slug: landingPage.slug,
+        landing_page_id: landingPage.id,
+        product_type: "life_insurance",
+        licensed_state_count: landingPage.licensedStates.length,
+        licensed_carrier_count: landingPage.licensedCarriers.length,
+      },
+      { pixelId: pagePixelId, eventId: newEventId("vc") },
+    );
+  }, [landingPage, pagePixelId]);
+
   const allowedStates = useMemo(() => landingPage?.licensedStates ?? [], [landingPage]);
+
+  const handleStartFlow = () => {
+    if (!quoteStartedSentRef.current && landingPage) {
+      quoteStartedSentRef.current = true;
+      trackCustomEvent(
+        "QuoteStarted",
+        {
+          landing_page_slug: landingPage.slug,
+          landing_page_id: landingPage.id,
+          product_type: "life_insurance",
+        },
+        { pixelId: pagePixelId, eventId: newEventId("qs") },
+      );
+    }
+    setStep("age");
+  };
 
   const quoteMutation = useMutation({
     mutationFn: async () => {
@@ -305,6 +353,25 @@ export default function LandingPageView() {
         answers: answers as LandingQuoteAnswers,
         contact: { ...contact, consent: true } as LandingContact,
       };
+      // Lead event fires at submission (no PII — only non-PII funnel signals).
+      const leadEventId = newEventId("lead");
+      eventIdsRef.current.lead = leadEventId;
+      trackStandardEvent(
+        "Lead",
+        {
+          landing_page_slug: landingPage?.slug,
+          landing_page_id: landingPage?.id,
+          product_type: "life_insurance",
+          state: answers.state,
+          coverage_amount: answers.coverageAmount,
+          coverage_tier: coverageTier(answers.coverageAmount),
+          smoker: answers.smoker,
+          health_class: answers.health,
+          gender: answers.gender,
+          age_range: answers.ageRange,
+        },
+        { pixelId: pagePixelId, eventId: leadEventId },
+      );
       const res = await apiRequest("POST", "/api/landing-quotes", payload);
       return (await res.json()) as LandingQuoteResponse;
     },
@@ -312,6 +379,24 @@ export default function LandingPageView() {
       setResponse(data);
       setStep("results");
       setErrorMessage(undefined);
+      const quotesEventId = newEventId("qg");
+      eventIdsRef.current.quotesGenerated = quotesEventId;
+      trackCustomEvent(
+        "QuotesGenerated",
+        {
+          landing_page_slug: landingPage?.slug,
+          landing_page_id: landingPage?.id,
+          product_type: "life_insurance",
+          quotes_count: data.options.length,
+          source: data.source,
+          state: answers.state,
+          coverage_amount: answers.coverageAmount,
+          coverage_tier: coverageTier(answers.coverageAmount),
+          smoker: answers.smoker,
+          health_class: answers.health,
+        },
+        { pixelId: pagePixelId, eventId: quotesEventId },
+      );
     },
     onError: (error: Error) => {
       setErrorMessage(error.message || "Could not generate quotes. Please try again.");
@@ -321,6 +406,25 @@ export default function LandingPageView() {
   const selectMutation = useMutation({
     mutationFn: async (option: LandingQuoteOption) => {
       setSelectedQuoteId(option.quoteId);
+      const selectEventId = newEventId("qsel");
+      eventIdsRef.current.quoteSelected = selectEventId;
+      trackCustomEvent(
+        "QuoteSelected",
+        {
+          landing_page_slug: landingPage?.slug,
+          landing_page_id: landingPage?.id,
+          product_type: option.productType,
+          carrier_name: option.carrierName,
+          product_name: option.productName,
+          coverage_amount: option.coverageAmount,
+          coverage_tier: coverageTier(option.coverageAmount),
+          term_length: option.termLength,
+          monthly_premium: option.monthlyPremium,
+          annual_premium: option.annualPremium,
+          source: option.source,
+        },
+        { pixelId: pagePixelId, eventId: selectEventId },
+      );
       const res = await apiRequest("POST", "/api/landing-quotes/select", {
         submissionId: response?.submissionId,
         selectedQuoteId: option.quoteId,
@@ -417,7 +521,7 @@ export default function LandingPageView() {
 
         {step === "intro" && (
           <QuestionFrame step="intro" title="Get your personalized quotes" subtitle="Takes about a minute. No spam. No selling your info to ad networks.">
-            <Button size="lg" className="w-full rounded-full" data-testid="button-start-flow" onClick={() => setStep("age")}>Start my quotes</Button>
+            <Button size="lg" className="w-full rounded-full" data-testid="button-start-flow" onClick={handleStartFlow}>Start my quotes</Button>
             <p className="text-center text-xs text-muted-foreground">By continuing you agree to our quote process.</p>
           </QuestionFrame>
         )}

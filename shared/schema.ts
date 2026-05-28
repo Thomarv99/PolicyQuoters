@@ -246,6 +246,11 @@ export const landingPageSchema = z.object({
   headline: z.string().optional(),
   subheadline: z.string().optional(),
   active: z.boolean(),
+  metaPixelId: z
+    .string()
+    .regex(/^\d{6,20}$/, "Meta Pixel ID must be 6-20 digits")
+    .optional()
+    .or(z.literal("")),
 });
 
 export type LandingPageInput = z.infer<typeof landingPageSchema>;
@@ -269,6 +274,7 @@ export type LandingPagePublic = {
   };
   licensedStates: string[];
   licensedCarriers: string[];
+  metaPixelId?: string;
 };
 
 export const landingQuoteAnswersSchema = z.object({

@@ -78,6 +78,23 @@ Optional Supabase client-SDK variables (used only if you also call Supabase from
 | `SUPABASE_SERVICE_ROLE_KEY` | Optional (server-side only) |
 | `SUPABASE_ANON_KEY` | Optional (only if reading from client) |
 
+### Meta Pixel tracking (optional)
+
+The landing page funnel (`/lp/:slug`) emits Meta Pixel events for ad conversion tracking. Set the global Pixel ID in Render → **Environment**:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `VITE_META_PIXEL_ID` | No | Numeric Meta Pixel ID (6-20 digits). When set, the Pixel script loads and emits `PageView`, `ViewContent`, `Lead`, `QuoteStarted`, `QuotesGenerated`, and `QuoteSelected` events on the landing page flow. When unset, all tracking calls are silent no-ops. |
+
+Per-landing-page overrides are also available in the admin builder (`/admin/landing-pages`) under the **Meta Pixel ID** field. A page-level value overrides the global env var for that page only.
+
+**Important:**
+
+- `VITE_*` env vars are baked into the Vite client bundle at build time. Changing `VITE_META_PIXEL_ID` requires a **manual deploy / rebuild** on Render before it takes effect on the live site.
+- **No PII is sent to Meta.** Tracking params are limited to non-identifying funnel signals (landing page slug, state, coverage tier, smoker flag, health class, gender, age range, carrier/product names on selection). Names, emails, phone numbers, addresses, and ZIP codes are **never** sent to Meta from the Pixel. If you later wire the Conversions API server-side, hash any user identifiers per Meta's spec.
+- The utility is resilient: if `fbq` is blocked by an ad blocker, the Pixel ID is missing, or the script fails to load, the funnel continues to work normally with no console noise.
+- Each tracked event gets a stable `event_id` for future Meta Conversions API deduplication.
+
 ## 3. Add the custom domain
 
 The current SEO metadata uses `https://www.policyquoters.com` as the canonical site URL.

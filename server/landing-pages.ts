@@ -57,6 +57,7 @@ export function publicLandingPage(page: LandingPage): LandingPagePublic {
     },
     licensedStates: page.licensedStates,
     licensedCarriers: page.licensedCarriers,
+    metaPixelId: page.metaPixelId || undefined,
   };
 }
 
@@ -75,6 +76,7 @@ function rowToLandingPage(row: Record<string, unknown>): LandingPage {
     headline: (row.headline as string | null) ?? undefined,
     subheadline: (row.subheadline as string | null) ?? undefined,
     active: Boolean(row.active),
+    metaPixelId: (row.meta_pixel_id as string | null) ?? undefined,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   };
@@ -152,8 +154,8 @@ export async function createLandingPage(input: LandingPageInput): Promise<Landin
       `INSERT INTO landing_pages (
         id, name, slug, agent_id, agent_display_name, agent_display_title,
         agent_phone, agent_email, licensed_states, licensed_carriers,
-        headline, subheadline, active, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14,$15)
+        headline, subheadline, active, meta_pixel_id, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14,$15,$16)
       RETURNING *`,
       [
         id,
@@ -169,6 +171,7 @@ export async function createLandingPage(input: LandingPageInput): Promise<Landin
         input.headline ?? null,
         input.subheadline ?? null,
         input.active,
+        input.metaPixelId || null,
         now,
         now,
       ],
@@ -178,6 +181,7 @@ export async function createLandingPage(input: LandingPageInput): Promise<Landin
 
   const created: LandingPage = {
     ...input,
+    metaPixelId: input.metaPixelId || undefined,
     slug,
     id,
     createdAt: now,
@@ -202,7 +206,7 @@ export async function updateLandingPage(id: string, input: LandingPageInput): Pr
       `UPDATE landing_pages SET
         name=$2, slug=$3, agent_id=$4, agent_display_name=$5, agent_display_title=$6,
         agent_phone=$7, agent_email=$8, licensed_states=$9::jsonb, licensed_carriers=$10::jsonb,
-        headline=$11, subheadline=$12, active=$13, updated_at=$14
+        headline=$11, subheadline=$12, active=$13, meta_pixel_id=$14, updated_at=$15
       WHERE id=$1 RETURNING *`,
       [
         id,
@@ -218,6 +222,7 @@ export async function updateLandingPage(id: string, input: LandingPageInput): Pr
         input.headline ?? null,
         input.subheadline ?? null,
         input.active,
+        input.metaPixelId || null,
         now,
       ],
     );
@@ -227,6 +232,7 @@ export async function updateLandingPage(id: string, input: LandingPageInput): Pr
   const updated: LandingPage = {
     ...current,
     ...input,
+    metaPixelId: input.metaPixelId || undefined,
     slug,
     updatedAt: now,
   };

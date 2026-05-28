@@ -57,9 +57,13 @@ CREATE TABLE IF NOT EXISTS landing_pages (
   headline TEXT,
   subheadline TEXT,
   active BOOLEAN NOT NULL DEFAULT true,
+  meta_pixel_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Forward-compatible: add the column for existing deployments.
+ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS meta_pixel_id TEXT;
 
 CREATE TABLE IF NOT EXISTS submissions (
   id TEXT PRIMARY KEY,
