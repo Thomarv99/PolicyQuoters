@@ -40,6 +40,17 @@ import {
   updateLandingPage,
 } from "./landing-pages";
 import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from "./hexure";
+import { ensureDatabaseReady, hasDatabaseUrl } from "./db";
+import {
+  loadAgentCases,
+  loadAgentDirectory,
+  loadAgentProfile,
+  saveAgentCase,
+  saveAgentDirectory,
+  saveAgentProfile,
+  saveAllAgentCases,
+  type AgentDirectoryEntry,
+} from "./agent-state";
 
 const carriers = [
   { id: "banner-life", name: "Banner Life", rating: "A+", term: 0.9, permanent: 1.04, conversion: "Convertible through year 20" },
@@ -158,12 +169,7 @@ let agentProfile: AgentProfile = {
   feeAuthorizationAccepted: false,
 };
 
-type AgentDirectoryProfile = AgentProfile & {
-  id: string;
-  performanceScore: number;
-  declineRate: number;
-  activeAssignments: number;
-};
+type AgentDirectoryProfile = AgentDirectoryEntry;
 
 function profileFromAgent(agent: AgentDirectoryProfile): AssignmentResponse["assignedAgent"] {
   return {
@@ -656,8 +662,65 @@ function caseFromAssignment(assignment: AssignmentResponse, request: { intake: A
   };
 }
 
+function persistAgentDirectory() {
+  saveAgentDirectory(agentDirectory).catch((error) => {
+    console.error("[persistence] Failed to save agent directory:", (error as Error).message);
+  });
+}
+
+function persistAgentProfile() {
+  saveAgentProfile(agentProfile).catch((error) => {
+    console.error("[persistence] Failed to save agent profile:", (error as Error).message);
+  });
+}
+
+function persistAgentCase(agentCase: AgentCase) {
+  saveAgentCase(agentCase).catch((error) => {
+    console.error("[persistence] Failed to save agent case:", (error as Error).message);
+  });
+}
+
+async function hydrateAgentState() {
+  if (!hasDatabaseUrl()) {
+    console.warn(
+      "[persistence] DATABASE_URL is not set. Using in-memory prototype storage. Set DATABASE_URL to a Supabase Postgres connection string for production persistence (see README_RENDER.md).",
+    );
+    return;
+  }
+  const ready = await ensureDatabaseReady();
+  if (!ready) {
+    console.error("[persistence] DATABASE_URL is set but Postgres initialization failed. Falling back to in-memory storage.");
+    return;
+  }
+  console.log("[persistence] Postgres-backed persistence enabled (Supabase-compatible).");
+
+  const storedDirectory = await loadAgentDirectory();
+  if (storedDirectory && storedDirectory.length > 0) {
+    agentDirectory = storedDirectory;
+  } else {
+    await saveAgentDirectory(agentDirectory);
+  }
+
+  const storedProfile = await loadAgentProfile();
+  if (storedProfile) {
+    agentProfile = storedProfile;
+    syncPrimaryAgentProfile();
+  } else {
+    await saveAgentProfile(agentProfile);
+  }
+
+  const storedCases = await loadAgentCases();
+  if (storedCases && storedCases.length > 0) {
+    agentCases.splice(0, agentCases.length, ...storedCases);
+  } else {
+    await saveAllAgentCases(agentCases);
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  seedLandingPages(
+  await hydrateAgentState();
+
+  await seedLandingPages(
     agentDirectory.map((agent) => ({
       id: agent.id,
       name: agent.name,
@@ -687,121 +750,155 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     );
   });
 
-  app.get("/api/admin/landing-pages", (_req, res) => {
-    return res.json(listLandingPages());
+  app.get("/api/admin/landing-pages", async (_req, res, next) => {
+    try {
+      return res.json(await listLandingPages());
+    } catch (error) {
+      return next(error);
+    }
   });
 
-  app.post("/api/admin/landing-pages", (req, res) => {
+  app.post("/api/admin/landing-pages", async (req, res, next) => {
     const parsed = landingPageSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
     }
     try {
-      const created = createLandingPage(parsed.data);
+      const created = await createLandingPage(parsed.data);
       return res.status(201).json(created);
     } catch (error) {
-      return res.status(409).json({ message: (error as Error).message });
+      if ((error as Error).message?.includes("already exists")) {
+        return res.status(409).json({ message: (error as Error).message });
+      }
+      return next(error);
     }
   });
 
-  app.put("/api/admin/landing-pages/:id", (req, res) => {
+  app.put("/api/admin/landing-pages/:id", async (req, res, next) => {
     const parsed = landingPageSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
     }
     try {
-      const updated = updateLandingPage(req.params.id, parsed.data);
+      const updated = await updateLandingPage(req.params.id, parsed.data);
       if (!updated) return res.status(404).json({ message: "Landing page not found" });
       return res.json(updated);
     } catch (error) {
-      return res.status(409).json({ message: (error as Error).message });
+      if ((error as Error).message?.includes("already exists")) {
+        return res.status(409).json({ message: (error as Error).message });
+      }
+      return next(error);
     }
   });
 
-  app.delete("/api/admin/landing-pages/:id", (req, res) => {
-    const deleted = deleteLandingPage(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Landing page not found" });
-    return res.status(204).end();
-  });
-
-  app.get("/api/landing-pages/:slug", (req, res) => {
-    const page = getLandingPageBySlug(req.params.slug);
-    if (!page || !page.active) {
-      return res.status(404).json({ message: "Landing page not found" });
+  app.delete("/api/admin/landing-pages/:id", async (req, res, next) => {
+    try {
+      const deleted = await deleteLandingPage(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Landing page not found" });
+      return res.status(204).end();
+    } catch (error) {
+      return next(error);
     }
-    return res.json(publicLandingPage(page));
   });
 
-  app.post("/api/landing-quotes", async (req, res) => {
+  app.get("/api/landing-pages/:slug", async (req, res, next) => {
+    try {
+      const page = await getLandingPageBySlug(req.params.slug);
+      if (!page || !page.active) {
+        return res.status(404).json({ message: "Landing page not found" });
+      }
+      return res.json(publicLandingPage(page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post("/api/landing-quotes", async (req, res, next) => {
     const parsed = landingQuoteRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid quote request", issues: parsed.error.issues });
     }
-    const { slug, answers, contact } = parsed.data;
-    const page = getLandingPageBySlug(slug);
-    if (!page || !page.active) {
-      return res.status(404).json({ message: "Landing page not found" });
-    }
-    if (!page.licensedStates.map((state) => state.toUpperCase()).includes(answers.state.toUpperCase())) {
-      return res.status(422).json({
-        message: `The agent on this page is not licensed in ${answers.state}.`,
-        allowedStates: page.licensedStates,
+    try {
+      const { slug, answers, contact } = parsed.data;
+      const page = await getLandingPageBySlug(slug);
+      if (!page || !page.active) {
+        return res.status(404).json({ message: "Landing page not found" });
+      }
+      if (!page.licensedStates.map((state) => state.toUpperCase()).includes(answers.state.toUpperCase())) {
+        return res.status(422).json({
+          message: `The agent on this page is not licensed in ${answers.state}.`,
+          allowedStates: page.licensedStates,
+        });
+      }
+
+      const hexure = await fetchHexureQuotes(page, answers);
+      const source: "hexure" | "mock" = hexure && hexure.length > 0 ? "hexure" : "mock";
+      const raw: LandingQuoteOption[] = source === "hexure" ? hexure! : buildMockQuotes(page, answers);
+      const filtered = filterQuotesByLandingPage(raw, page)
+        .sort((a, b) => a.monthlyPremium - b.monthlyPremium)
+        .slice(0, 9);
+
+      const submission = await recordSubmission({
+        landingPageId: page.id,
+        contact,
+        answers,
+        options: filtered,
+        source,
       });
+
+      const response: LandingQuoteResponse = {
+        requestId: `LPQ-${Date.now().toString(36).toUpperCase()}`,
+        submissionId: submission.id,
+        source,
+        options: filtered,
+        landingPage: publicLandingPage(page),
+      };
+      return res.json(response);
+    } catch (error) {
+      return next(error);
     }
-
-    const hexure = await fetchHexureQuotes(page, answers);
-    const source: "hexure" | "mock" = hexure && hexure.length > 0 ? "hexure" : "mock";
-    const raw: LandingQuoteOption[] = source === "hexure" ? hexure! : buildMockQuotes(page, answers);
-    const filtered = filterQuotesByLandingPage(raw, page)
-      .sort((a, b) => a.monthlyPremium - b.monthlyPremium)
-      .slice(0, 9);
-
-    const submission = recordSubmission({
-      landingPageId: page.id,
-      contact,
-      answers,
-      options: filtered,
-      source,
-    });
-
-    const response: LandingQuoteResponse = {
-      requestId: `LPQ-${Date.now().toString(36).toUpperCase()}`,
-      submissionId: submission.id,
-      source,
-      options: filtered,
-      landingPage: publicLandingPage(page),
-    };
-    return res.json(response);
   });
 
-  app.post("/api/landing-quotes/select", (req, res) => {
+  app.post("/api/landing-quotes/select", async (req, res, next) => {
     const parsed = landingSelectionSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid selection", issues: parsed.error.issues });
     }
-    const submission = getSubmission(parsed.data.submissionId);
-    if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
+    try {
+      const submission = await getSubmission(parsed.data.submissionId);
+      if (!submission) {
+        return res.status(404).json({ message: "Submission not found" });
+      }
+      const lead = await selectQuote(parsed.data.submissionId, parsed.data.selectedQuoteId);
+      if (!lead) {
+        return res.status(404).json({ message: "Selected quote not found" });
+      }
+      return res.status(201).json({
+        leadId: lead.id,
+        agentDisplayName: lead.agentDisplayName,
+        landingPageName: lead.landingPageName,
+        selectedQuote: lead.selectedQuote,
+      });
+    } catch (error) {
+      return next(error);
     }
-    const lead = selectQuote(parsed.data.submissionId, parsed.data.selectedQuoteId);
-    if (!lead) {
-      return res.status(404).json({ message: "Selected quote not found" });
-    }
-    return res.status(201).json({
-      leadId: lead.id,
-      agentDisplayName: lead.agentDisplayName,
-      landingPageName: lead.landingPageName,
-      selectedQuote: lead.selectedQuote,
-    });
   });
 
-  app.get("/api/admin/leads", (_req, res) => {
-    return res.json(listAllLeads());
+  app.get("/api/admin/leads", async (_req, res, next) => {
+    try {
+      return res.json(await listAllLeads());
+    } catch (error) {
+      return next(error);
+    }
   });
 
-  app.get("/api/agent/leads", (req, res) => {
-    const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
-    return res.json(listLeadsForAgent(agentId));
+  app.get("/api/agent/leads", async (req, res, next) => {
+    try {
+      const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
+      return res.json(await listLeadsForAgent(agentId));
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get("/api/agent/profile", (_req, res) => {
@@ -816,6 +913,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     agentProfile = parsed.data;
     syncPrimaryAgentProfile();
+    persistAgentProfile();
+    persistAgentDirectory();
 
     return res.json(profileReadiness(agentProfile));
   });
@@ -863,7 +962,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ],
     };
 
-    agentCases.unshift(caseFromAssignment(response, { intake: parsed.data.intake, selectedQuote: parsed.data.selectedQuote, quoteRequest: parsed.data.quoteRequest }));
+    const newCase = caseFromAssignment(response, { intake: parsed.data.intake, selectedQuote: parsed.data.selectedQuote, quoteRequest: parsed.data.quoteRequest });
+    agentCases.unshift(newCase);
+    persistAgentCase(newCase);
 
     return res.json(response);
   });
@@ -888,6 +989,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updated = assignCaseToAgent(target, parsed.data.agentId, "Admin", parsed.data.reason);
     if (!updated) return res.status(404).json({ message: "Agent not found" });
 
+    persistAgentCase(updated);
     return res.json(adminCase(updated));
   });
 
@@ -912,6 +1014,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         actor: "Assignment Engine",
         event: `No eligible agent found. Case moved to admin queue. ${parsed.data.reason ? `Reason: ${parsed.data.reason}` : ""}`,
       });
+      persistAgentCase(target);
       return res.json(adminCase(target));
     }
 
@@ -921,6 +1024,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       actor: "Assignment Engine",
       event: `Reroute completed to ${next.name}.`,
     });
+    persistAgentCase(target);
     return res.json(adminCase(target));
   });
 
@@ -940,6 +1044,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       actor: "Assignment Engine",
       event: `Assignment window expired and case returned to routing queue. ${parsed.data.reason ? `Reason: ${parsed.data.reason}` : ""}`,
     });
+    persistAgentCase(target);
     return res.json(adminCase(target));
   });
 
@@ -965,6 +1070,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (parsed.data.status === "issued") target.chargeStatus = "charged";
     if (parsed.data.status === "declined" || parsed.data.status === "not-placed") target.chargeStatus = "waived";
 
+    persistAgentCase(target);
     return res.json(target);
   });
 

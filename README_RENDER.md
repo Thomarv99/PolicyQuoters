@@ -37,14 +37,45 @@ The landing-page quote endpoint calls Hexure when these are set, and falls back 
 
 When neither base URL nor key is set, the server logs `[hexure] ...` warnings and uses the built-in mock generator, so the funnel stays usable for ad-traffic testing today.
 
-### Production persistence (Supabase)
+### Production persistence (Supabase Postgres)
 
-The MVP landing-page builder, consumer submissions, and lead/assignment records currently use an in-process in-memory store (see `server/landing-pages.ts`). For production on Render, swap to Supabase (or another managed database) using:
+The server uses Postgres-backed persistence (Supabase compatible) when `DATABASE_URL` is set. Landing pages, quote submissions, selected quotes (leads), the agent directory, the primary agent profile, and agent cases are all stored in Postgres. When `DATABASE_URL` is missing, the server falls back to an in-process in-memory store (suitable for local development only — data is lost on every restart).
+
+On startup the server logs one of:
+
+```text
+[persistence] Postgres-backed persistence enabled (Supabase-compatible).
+[persistence] DATABASE_URL is not set. Using in-memory prototype storage. ...
+```
+
+Set the following in Render → **Environment**:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes (for production) | Supabase Postgres connection string. Use the URI from Supabase Dashboard → Project Settings → Database → Connection string. Replace `[YOUR-PASSWORD]` with the real database password. **Never commit this value.** For Render web services, the **Session pooler** URI (`...pooler.supabase.com:5432`) is recommended. |
+| `DATABASE_POOL_MAX` | No | Defaults to `5`. Raise if you need more concurrent connections. |
+| `DATABASE_SSL` | No | Defaults to TLS with `rejectUnauthorized=false` (required for Supabase). Set to `disable` only for a non-TLS local Postgres. |
+
+Example shape of the Supabase connection string (do **not** paste real credentials into git):
+
+```text
+postgresql://postgres:<URL-ENCODED-PASSWORD>@db.<project-ref>.supabase.co:5432/postgres
+# or, for the pooler (recommended for Render):
+postgresql://postgres.<project-ref>:<URL-ENCODED-PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
+Tips:
+
+- URL-encode any special characters in the password (e.g. `@` → `%40`).
+- Add `DATABASE_URL` in the Render dashboard's **Environment** tab — not in `render.yaml`, since `render.yaml` is committed to git.
+- The schema is created automatically on first boot (idempotent `CREATE TABLE IF NOT EXISTS`). No separate migration step is required for the MVP.
+
+Optional Supabase client-SDK variables (used only if you also call Supabase from elsewhere — they are not required for persistence):
 
 | Variable | Required |
 | --- | --- |
-| `SUPABASE_URL` | Yes (for production) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes (server-side only) |
+| `SUPABASE_URL` | Optional |
+| `SUPABASE_SERVICE_ROLE_KEY` | Optional (server-side only) |
 | `SUPABASE_ANON_KEY` | Optional (only if reading from client) |
 
 ## 3. Add the custom domain
