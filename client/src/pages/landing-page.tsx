@@ -277,10 +277,18 @@ export default function LandingPageView() {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | undefined>();
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
-  const { data: landingPage, isLoading, isError } = useQuery<LandingPagePublic>({
+  const { data: landingPage, isLoading, isError, error } = useQuery<LandingPagePublic>({
     queryKey: [`/api/landing-pages/${slug}`],
     enabled: Boolean(slug),
   });
+
+  const loadErrorMessage = (() => {
+    if (!isError && landingPage) return undefined;
+    const raw = (error as Error | undefined)?.message ?? "";
+    if (raw.startsWith("404")) return `We couldn't find a landing page at /lp/${slug}. It may have been removed or paused.`;
+    if (raw) return `We couldn't load this landing page (${raw}). Please try again in a moment.`;
+    return undefined;
+  })();
 
   useEffect(() => {
     if (slug) {
@@ -327,23 +335,38 @@ export default function LandingPageView() {
     },
   });
 
-  if (!slug) return null;
+  if (!slug) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+        <Card>
+          <CardContent className="space-y-3 p-6 text-center">
+            <p className="text-base font-semibold">No landing page specified.</p>
+            <p className="text-sm text-muted-foreground">Open a landing page link in the format /lp/&lt;slug&gt;.</p>
+            <Button asChild className="rounded-full"><Link href="/">Return home</Link></Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background p-6 text-foreground">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading landing page…</p>
       </main>
     );
   }
 
   if (isError || !landingPage) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
         <Card>
-          <CardContent className="space-y-3 p-6 text-center">
-            <p className="text-base font-semibold">This page is not available.</p>
-            <p className="text-sm text-muted-foreground">The landing page you are looking for is paused or does not exist.</p>
+          <CardContent className="space-y-3 p-6 text-center" data-testid="landing-page-error">
+            <p className="text-base font-semibold">This page isn&apos;t available right now.</p>
+            <p className="text-sm text-muted-foreground">
+              {loadErrorMessage ?? `The landing page at /lp/${slug} could not be found or is paused. Double-check the link or contact the agent who shared it.`}
+            </p>
             <Button asChild className="rounded-full"><Link href="/">Return home</Link></Button>
           </CardContent>
         </Card>

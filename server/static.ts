@@ -13,8 +13,12 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("/{*path}", (_req, res) => {
+  // SPA fallback: serve index.html for client-side routes. We exclude requests
+  // that look like static assets (anything with a file extension) so a missing
+  // asset returns a real 404 instead of an HTML body — otherwise the browser
+  // receives HTML where it expects JS/CSS and the page renders blank.
+  app.use("/{*path}", (req, res, next) => {
+    if (/\.[a-zA-Z0-9]+$/.test(req.originalUrl.split("?")[0] ?? "")) return next();
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
