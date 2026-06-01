@@ -103,4 +103,10 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     },
   );
-})();
+})().catch((error) => {
+  // Startup guards (e.g. a production deploy with a missing/broken DATABASE_URL)
+  // throw here. Exit non-zero so Render marks the deploy as failed instead of
+  // serving on volatile in-memory storage and silently losing data.
+  console.error("[startup] Fatal error during server startup:", error);
+  process.exit(1);
+});

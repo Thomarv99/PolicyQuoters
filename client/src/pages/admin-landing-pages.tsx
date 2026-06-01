@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Database, Loader2, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,15 @@ type AgentSummary = {
   phone: string;
   licenseStates: string[];
   carrierAppointments: string[];
+};
+
+type PersistenceStatus = {
+  backend: "database" | "memory";
+  databaseUrlConfigured: boolean;
+  databaseInitialized: boolean;
+  databaseInitFailed: boolean;
+  production: boolean;
+  persistenceDegraded: boolean;
 };
 
 const emptyForm: LandingPageInput = {
@@ -149,6 +158,16 @@ export default function AdminLandingPages() {
   const { data: agents = [] } = useQuery<AgentSummary[]>({ queryKey: ["/api/admin/agents"] });
   const { data: pages = [], isLoading } = useQuery<LandingPage[]>({ queryKey: ["/api/admin/landing-pages"] });
   const { data: leads = [] } = useQuery<LandingLead[]>({ queryKey: ["/api/admin/leads"] });
+  const { data: persistence } = useQuery<PersistenceStatus>({
+    queryKey: ["/api/persistence-status"],
+    refetchInterval: 30_000,
+    staleTime: 0,
+  });
+
+  // When production has fallen back to volatile in-memory storage, anything saved
+  // here is lost on the next redeploy. Block create/update/delete so admins can't
+  // build pages that silently vanish, and surface a prominent warning.
+  const persistenceDegraded = persistence?.persistenceDegraded ?? false;
 
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === form.agentId), [agents, form.agentId]);
 
@@ -279,6 +298,10 @@ export default function AdminLandingPages() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(undefined);
+    if (persistenceDegraded) {
+      setError("Database persistence is unavailable; changes are not being saved. Fix DATABASE_URL and redeploy before creating landing pages.");
+      return;
+    }
     if (!form.name.trim() || form.licensedCarriers.length === 0 || form.licensedStates.length === 0) {
       setError("Page name, at least one state, and at least one carrier are required.");
       return;
@@ -468,15 +491,33 @@ export default function AdminLandingPages() {
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-        <Card className="mb-5 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          <CardContent className="flex items-start gap-3 p-4 text-sm leading-6">
-            <Database className="mt-0.5 h-4 w-4" />
-            <p>
-              <strong>Prototype persistence:</strong> Landing pages, submissions, and leads are stored in-process in memory for this MVP.
-              For production on Render, swap to Supabase (or another managed database). See <code>README_RENDER.md</code> for env vars.
-            </p>
-          </CardContent>
-        </Card>
+        {persistenceDegraded ? (
+          <Card className="mb-5 border-destructive bg-destructive/10 text-destructive">
+            <CardContent className="flex items-start gap-3 p-4 text-sm leading-6" data-testid="banner-persistence-degraded">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-semibold">Database persistence is unavailable; changes are not being saved.</p>
+                <p>
+                  The server is running on volatile in-memory storage, so any landing page created or edited
+                  here is lost on the next redeploy or restart. Saving is disabled until persistence is restored.
+                  Fix <code>DATABASE_URL</code> (prefer the Supabase Session Pooler with <code>sslmode=require</code>),
+                  then trigger a manual redeploy on Render. See <code>README_RENDER.md</code>.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-5 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            <CardContent className="flex items-start gap-3 p-4 text-sm leading-6">
+              <Database className="mt-0.5 h-4 w-4" />
+              <p>
+                <strong>Persistence:</strong> Landing pages, submissions, and leads are stored in Postgres (Supabase) when{" "}
+                <code>DATABASE_URL</code> is configured. Locally, an in-memory fallback is used and data is lost on restart.
+                See <code>README_RENDER.md</code> for env vars.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <section className="mb-5 rounded-3xl border border-border bg-card/86 p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -882,7 +923,7 @@ export default function AdminLandingPages() {
                   <Button
                     type="submit"
                     className="rounded-full"
-                    disabled={saveMutation.isPending || createAgentMutation.isPending}
+                    disabled={saveMutation.isPending || createAgentMutation.isPending || persistenceDegraded}
                     data-testid="button-save-lp"
                   >
                     {saveMutation.isPending || createAgentMutation.isPending ? (
@@ -933,7 +974,7 @@ export default function AdminLandingPages() {
                       <Button type="button" size="sm" variant="ghost" className="rounded-full" onClick={() => startEdit(page)} data-testid={`button-edit-${page.slug}`}>
                         <Pencil className="mr-1 h-3.5 w-3.5" />Edit
                       </Button>
-                      <Button type="button" size="sm" variant="ghost" className="rounded-full text-destructive hover:text-destructive" onClick={() => deleteMutation.mutate(page.id)} disabled={deleteMutation.isPending} data-testid={`button-delete-${page.slug}`}>
+                      <Button type="button" size="sm" variant="ghost" className="rounded-full text-destructive hover:text-destructive" onClick={() => deleteMutation.mutate(page.id)} disabled={deleteMutation.isPending || persistenceDegraded} data-testid={`button-delete-${page.slug}`}>
                         <Trash2 className="mr-1 h-3.5 w-3.5" />Delete
                       </Button>
                     </div>

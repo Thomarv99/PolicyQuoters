@@ -41,7 +41,12 @@ import {
   updateLandingPage,
 } from "./landing-pages";
 import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from "./hexure";
-import { ensureDatabaseReady, hasDatabaseUrl } from "./db";
+import {
+  ensureDatabaseReady,
+  getPersistenceStatus,
+  hasDatabaseUrl,
+  isPersistenceAvailable,
+} from "./db";
 import {
   getVisitorCaptureEvent,
   getVisitorCaptureStorageStatus,
@@ -692,7 +697,18 @@ function persistAgentCase(agentCase: AgentCase) {
 }
 
 async function hydrateAgentState() {
+  const isProduction = process.env.NODE_ENV === "production";
   if (!hasDatabaseUrl()) {
+    if (isProduction) {
+      // Fail fast: a production deploy with no database would silently lose
+      // every landing page, lead, and captured contact on the next redeploy.
+      console.error(
+        "[persistence] FATAL: DATABASE_URL is not set in production. Refusing to start on volatile in-memory storage. Configure a Supabase/Postgres DATABASE_URL (see README_RENDER.md).",
+      );
+      throw new Error(
+        "DATABASE_URL is required in production. Refusing to start on volatile in-memory storage.",
+      );
+    }
     console.warn(
       "[persistence] DATABASE_URL is not set. Using in-memory prototype storage. Set DATABASE_URL to a Supabase Postgres connection string for production persistence (see README_RENDER.md).",
     );
@@ -700,6 +716,17 @@ async function hydrateAgentState() {
   }
   const ready = await ensureDatabaseReady();
   if (!ready) {
+    if (isProduction) {
+      // DATABASE_URL is configured but unreachable/invalid. Crash instead of
+      // serving on memory so Render surfaces the failure and the operator fixes
+      // the connection string rather than silently losing data on redeploy.
+      console.error(
+        "[persistence] FATAL: DATABASE_URL is set but Postgres initialization failed in production. Refusing to start on volatile in-memory storage. Verify the connection string (prefer the Supabase Session Pooler with sslmode=require) — see README_RENDER.md.",
+      );
+      throw new Error(
+        "Postgres initialization failed in production. Refusing to start on volatile in-memory storage.",
+      );
+    }
     console.error("[persistence] DATABASE_URL is set but Postgres initialization failed. Falling back to in-memory storage.");
     return;
   }
@@ -917,6 +944,22 @@ const requireAdminSecret: RequestHandler = (req, res, next) => {
   return next();
 };
 
+// Blocks writes to persistent resources (landing pages, leads, agent state,
+// captured contacts, assignments) when production has fallen back to volatile
+// in-memory storage. Defense-in-depth behind the fail-fast startup guard: if the
+// database degrades after boot, this prevents creating data that would be lost on
+// the next redeploy, returning a clear 503 instead of silently "succeeding".
+const requirePersistence: RequestHandler = (_req, res, next) => {
+  if (isPersistenceAvailable()) {
+    return next();
+  }
+  return res.status(503).json({
+    ok: false,
+    message: "Database persistence is unavailable; changes are not being saved",
+    storage: getPersistenceStatus(),
+  });
+};
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await hydrateAgentState();
 
@@ -933,7 +976,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   app.get("/healthz", (_req, res) => {
-    return res.status(200).json({ status: "ok" });
+    // Surface persistence status (no secrets/connection strings) so a degraded
+    // production deploy is visible without checking the admin UI. Returns 503
+    // when production has fallen back to volatile in-memory storage so Render's
+    // health check and external monitors flag the broken database.
+    const persistence = getPersistenceStatus();
+    const status = persistence.persistenceDegraded ? "degraded" : "ok";
+    return res.status(persistence.persistenceDegraded ? 503 : 200).json({
+      status,
+      persistence,
+    });
+  });
+
+  // Always-200 persistence diagnostics for the admin UI. Mirrors /healthz's
+  // persistence block but never returns a non-2xx status, so the admin landing
+  // builder can read it via the default query client and warn/disable saves when
+  // storage is degraded. Contains no secrets/connection strings.
+  app.get("/api/persistence-status", (_req, res) => {
+    return res.status(200).json(getPersistenceStatus());
   });
 
   // Webhook receiver for the GetEmails (GE) visitor capture tool. Authenticated
@@ -963,6 +1023,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.warn(
         "[visitor-capture] GETEMAILS_WEBHOOK_SECRET is not set. Accepting webhook without authentication (non-production only).",
       );
+    }
+
+    if (!isPersistenceAvailable()) {
+      // Don't accept captures into volatile memory in production — they'd be
+      // lost on the next redeploy. Return 503 so the sender can retry later.
+      console.error(
+        "[visitor-capture] Refusing webhook: persistence is degraded (volatile in-memory storage). Captures are not being saved.",
+      );
+      return res.status(503).json({
+        ok: false,
+        message: "Database persistence is unavailable; changes are not being saved",
+      });
     }
 
     try {
@@ -1051,7 +1123,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     );
   });
 
-  app.post("/api/admin/agents", async (req, res) => {
+  app.post("/api/admin/agents", requirePersistence, async (req, res) => {
     const parsed = manualAgentInputSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid agent", issues: parsed.error.issues });
@@ -1126,7 +1198,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/admin/landing-pages", async (req, res, next) => {
+  app.post("/api/admin/landing-pages", requirePersistence, async (req, res, next) => {
     const parsed = landingPageSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
@@ -1142,13 +1214,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.put("/api/admin/landing-pages/:id", async (req, res, next) => {
+  app.put("/api/admin/landing-pages/:id", requirePersistence, async (req, res, next) => {
     const parsed = landingPageSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid landing page", issues: parsed.error.issues });
     }
     try {
-      const updated = await updateLandingPage(req.params.id, parsed.data);
+      const updated = await updateLandingPage(String(req.params.id), parsed.data);
       if (!updated) return res.status(404).json({ message: "Landing page not found" });
       return res.json(updated);
     } catch (error) {
@@ -1159,9 +1231,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/admin/landing-pages/:id", async (req, res, next) => {
+  app.delete("/api/admin/landing-pages/:id", requirePersistence, async (req, res, next) => {
     try {
-      const deleted = await deleteLandingPage(req.params.id);
+      const deleted = await deleteLandingPage(String(req.params.id));
       if (!deleted) return res.status(404).json({ message: "Landing page not found" });
       return res.status(204).end();
     } catch (error) {
@@ -1181,7 +1253,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/landing-quotes", async (req, res, next) => {
+  app.post("/api/landing-quotes", requirePersistence, async (req, res, next) => {
     const parsed = landingQuoteRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid quote request", issues: parsed.error.issues });
@@ -1227,7 +1299,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/landing-quotes/select", async (req, res, next) => {
+  app.post("/api/landing-quotes/select", requirePersistence, async (req, res, next) => {
     const parsed = landingSelectionSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid selection", issues: parsed.error.issues });
@@ -1273,7 +1345,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(profileReadiness(agentProfile));
   });
 
-  app.put("/api/agent/profile", (req, res) => {
+  app.put("/api/agent/profile", requirePersistence, (req, res) => {
     const parsed = agentProfileSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid agent profile", issues: parsed.error.issues });
@@ -1311,7 +1383,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(response);
   });
 
-  app.post("/api/assignments", (req, res) => {
+  app.post("/api/assignments", requirePersistence, (req, res) => {
     const parsed = assignmentRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid assignment request", issues: parsed.error.issues });
@@ -1345,7 +1417,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(adminDashboard());
   });
 
-  app.post("/api/admin/cases/:id/assign", (req, res) => {
+  app.post("/api/admin/cases/:id/assign", requirePersistence, (req, res) => {
     const parsed = adminAssignAgentSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid assignment action", issues: parsed.error.issues });
@@ -1361,7 +1433,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(adminCase(updated));
   });
 
-  app.post("/api/admin/cases/:id/reroute", (req, res) => {
+  app.post("/api/admin/cases/:id/reroute", requirePersistence, (req, res) => {
     const parsed = adminCaseActionSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid reroute action", issues: parsed.error.issues });

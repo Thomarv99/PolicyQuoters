@@ -2,7 +2,7 @@
 // webhook. When DATABASE_URL is set, reads/writes go to Postgres (Supabase);
 // otherwise an in-process in-memory store is used so local/dev runs work
 // without a database. See README_RENDER.md.
-import { databaseInitFailed, hasDatabaseUrl, isDatabaseInitialized, query } from "./db";
+import { getPersistenceStatus, hasDatabaseUrl, isDatabaseInitialized, query } from "./db";
 
 function nowIso() {
   return new Date().toISOString();
@@ -66,19 +66,15 @@ export type VisitorCaptureStorageStatus = {
 // Reports how captured visitor events are being stored. Contains no secrets or
 // connection strings — only booleans/counts safe to show in the admin UI.
 export function getVisitorCaptureStorageStatus(): VisitorCaptureStorageStatus {
-  const databaseUrlConfigured = hasDatabaseUrl();
-  const databaseInitialized = isDatabaseInitialized();
-  const initFailed = databaseInitFailed();
-  const onDatabase = databaseUrlConfigured && databaseInitialized;
-  const isProduction = process.env.NODE_ENV === "production";
+  const status = getPersistenceStatus();
   return {
-    backend: onDatabase ? "database" : "memory",
-    databaseUrlConfigured,
-    databaseInitialized,
-    databaseInitFailed: initFailed,
+    backend: status.backend,
+    databaseUrlConfigured: status.databaseUrlConfigured,
+    databaseInitialized: status.databaseInitialized,
+    databaseInitFailed: status.databaseInitFailed,
     // Degraded only matters in production: a missing/broken DB there means
     // captures are being dropped on restart, which is the bug we surface.
-    persistenceDegraded: isProduction && !onDatabase,
+    persistenceDegraded: status.persistenceDegraded,
     memoryEventCount: memEvents.size,
   };
 }

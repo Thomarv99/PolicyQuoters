@@ -194,6 +194,44 @@ export function databaseInitFailed(): boolean {
   return initFailed;
 }
 
+export type PersistenceStatus = {
+  // "database" when reads/writes hit Postgres; "memory" when using the volatile
+  // in-process store (data is lost on every redeploy/restart).
+  backend: "database" | "memory";
+  databaseUrlConfigured: boolean;
+  databaseInitialized: boolean;
+  databaseInitFailed: boolean;
+  production: boolean;
+  // True when production is running on volatile in-memory storage. Persistent
+  // writes must be blocked in this state so data isn't silently lost on redeploy.
+  persistenceDegraded: boolean;
+};
+
+// Single source of truth for whether persistent resources are actually being
+// saved. Contains no secrets/connection strings — only booleans safe to surface
+// in /healthz and the admin UI.
+export function getPersistenceStatus(): PersistenceStatus {
+  const databaseUrlConfigured = hasDatabaseUrl();
+  const databaseInitialized = initialized;
+  const onDatabase = databaseUrlConfigured && databaseInitialized;
+  const production = process.env.NODE_ENV === "production";
+  return {
+    backend: onDatabase ? "database" : "memory",
+    databaseUrlConfigured,
+    databaseInitialized,
+    databaseInitFailed: initFailed,
+    production,
+    persistenceDegraded: production && !onDatabase,
+  };
+}
+
+// In production, persistent resources must never be created in volatile memory.
+// Returns true when it is safe to write persistent data (dev fallback, or a
+// healthy database in production).
+export function isPersistenceAvailable(): boolean {
+  return !getPersistenceStatus().persistenceDegraded;
+}
+
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],

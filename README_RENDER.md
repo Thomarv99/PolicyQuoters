@@ -39,14 +39,34 @@ When neither base URL nor key is set, the server logs `[hexure] ...` warnings an
 
 ### Production persistence (Supabase Postgres)
 
-The server uses Postgres-backed persistence (Supabase compatible) when `DATABASE_URL` is set. Landing pages, quote submissions, selected quotes (leads), the agent directory, the primary agent profile, and agent cases are all stored in Postgres. When `DATABASE_URL` is missing, the server falls back to an in-process in-memory store (suitable for local development only — data is lost on every restart).
+> ⚠️ **CRITICAL — Render must have a working `DATABASE_URL`.** In production the server now **refuses to start** unless it can connect to Postgres. If `DATABASE_URL` is missing, invalid, or unreachable, the deploy will **fail fast and crash** (visible in the Render logs and the `/healthz` check) instead of silently serving on volatile in-memory storage. This is intentional: the previous behavior silently fell back to memory and **wiped landing pages, leads, and captured contacts on every redeploy**.
+>
+> - Use a **working Supabase/Postgres `DATABASE_URL`**. Prefer the **Supabase Session Pooler** (`...pooler.supabase.com:5432`) with **`sslmode=require`**.
+> - **A manual redeploy is required after changing any environment variable** in Render — env var edits do not take effect until you trigger a redeploy.
+> - **Data created while the memory fallback was active cannot be recovered after a redeploy.** It was never written to a database. There is no backup to restore. Recreate those landing pages once persistence is healthy.
+
+The server uses Postgres-backed persistence (Supabase compatible) when `DATABASE_URL` is set. Landing pages, quote submissions, selected quotes (leads), the agent directory, the primary agent profile, and agent cases are all stored in Postgres. In **development only**, when `DATABASE_URL` is missing the server falls back to an in-process in-memory store (data is lost on every restart). This fallback is **disabled in production** by the startup guard above.
 
 On startup the server logs one of:
 
 ```text
 [persistence] Postgres-backed persistence enabled (Supabase-compatible).
-[persistence] DATABASE_URL is not set. Using in-memory prototype storage. ...
+[persistence] DATABASE_URL is not set. Using in-memory prototype storage. ...        (development only)
+[persistence] FATAL: DATABASE_URL is not set in production. Refusing to start ...     (production, crashes)
+[persistence] FATAL: DATABASE_URL is set but Postgres initialization failed ...        (production, crashes)
 ```
+
+If a database degrades **after** a successful boot, write endpoints for persistent data (landing pages, leads, captured-contact webhook, agent state) return HTTP `503` with `Database persistence is unavailable; changes are not being saved`, and the admin landing-page builder shows a prominent red banner and disables saving. `/healthz` returns `503` with `"status": "degraded"` in this state so Render and external monitors flag it.
+
+#### Verifying persistence health
+
+`GET /healthz` returns persistence diagnostics (no secrets):
+
+```json
+{ "status": "ok", "persistence": { "backend": "database", "databaseUrlConfigured": true, "databaseInitialized": true, "persistenceDegraded": false } }
+```
+
+A `backend` of `"memory"` or `persistenceDegraded: true` in production means data is **not** being saved — fix `DATABASE_URL` and redeploy.
 
 Set the following in Render → **Environment**:
 
