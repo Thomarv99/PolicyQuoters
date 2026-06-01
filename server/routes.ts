@@ -43,10 +43,14 @@ import {
 import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from "./hexure";
 import { ensureDatabaseReady, hasDatabaseUrl } from "./db";
 import {
+  getVisitorCaptureEvent,
   listVisitorCaptureEvents,
   recordVisitorCaptureEvent,
+  updateVisitorCaptureEnrichment,
+  type VisitorCaptureEvent,
   type VisitorCaptureInput,
 } from "./visitor-capture";
+import { enrichContact, isVersiumConfigured, type VersiumContactInput } from "./versium";
 import {
   loadAgentCases,
   loadAgentDirectory,
@@ -816,6 +820,73 @@ function buildVisitorCaptureInput(
   };
 }
 
+// Maps a stored visitor-capture event into Versium Contact Append search
+// params. Pulls structured fields first, then falls back to raw GE payload keys
+// for address fields the webhook does not extract into columns. Only non-empty
+// values are forwarded; country defaults to US when we have a US-style address.
+function buildVersiumInput(event: VisitorCaptureEvent): VersiumContactInput {
+  const raw = (event.rawPayload && typeof event.rawPayload === "object"
+    ? (event.rawPayload as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const address = pickString(raw.address, raw.address_1, raw.street, getNested(raw, "address", "line1"));
+  const address2 = pickString(raw.address_2, raw.address2, raw.unit, raw.apt);
+  const city = pickString(raw.city, getNested(raw, "address", "city"));
+  const state = pickString(raw.state, raw.region, getNested(raw, "address", "state"));
+  const zip = pickString(raw.zip, raw.zip_code, raw.postal_code, raw.postalCode, getNested(raw, "address", "zip"));
+  const country = pickString(raw.country, getNested(raw, "address", "country")) ?? (address || zip ? "US" : undefined);
+
+  return {
+    email: event.email,
+    phone: event.phone,
+    first: event.firstName ?? pickString(raw.first_name, raw.firstName),
+    last: event.lastName ?? pickString(raw.last_name, raw.lastName),
+    address,
+    address2,
+    city,
+    state,
+    zip,
+    country,
+  };
+}
+
+// Runs Versium enrichment for an event and persists the outcome. Never throws —
+// all failures are captured and stored as an enrichment status so webhook
+// ingestion and admin reads are never disrupted. The API key is never logged.
+async function runEnrichment(event: VisitorCaptureEvent): Promise<void> {
+  const requestedAt = new Date().toISOString();
+  try {
+    const result = await enrichContact(buildVersiumInput(event));
+    await updateVisitorCaptureEnrichment(event.id, {
+      enrichmentStatus: result.status,
+      enrichmentProvider: "versium",
+      enrichmentRequestedAt: requestedAt,
+      enrichmentCompletedAt: new Date().toISOString(),
+      enrichmentError: result.error ?? (result.status === "skipped" ? result.detail : undefined),
+      enrichmentPayload: result.raw,
+    });
+    if (result.status === "failure") {
+      console.warn(`[versium] enrichment failed for ${event.id}: ${result.error ?? "unknown error"}`);
+    }
+  } catch (error) {
+    // Defensive: updateVisitorCaptureEnrichment or anything unexpected failing
+    // must not crash the process or leave an unhandled rejection.
+    const message = error instanceof Error ? error.message : "Unknown enrichment error";
+    console.warn(`[versium] enrichment error for ${event.id}: ${message}`);
+    try {
+      await updateVisitorCaptureEnrichment(event.id, {
+        enrichmentStatus: "failure",
+        enrichmentProvider: "versium",
+        enrichmentRequestedAt: requestedAt,
+        enrichmentCompletedAt: new Date().toISOString(),
+        enrichmentError: message,
+      });
+    } catch {
+      /* swallow — nothing else we can do */
+    }
+  }
+}
+
 // Guards admin endpoints that expose visitor/contact PII. The caller must send
 // the X-PolicyQuoters-Admin-Secret header matching POLICYQUOTERS_ADMIN_API_SECRET.
 // Fails closed in production when the secret is unset so we never serve contact
@@ -896,7 +967,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const input = buildVisitorCaptureInput(req.body, req.headers as Record<string, unknown>, req.ip);
       const event = await recordVisitorCaptureEvent(input);
-      return res.status(202).json({ ok: true, id: event.id });
+
+      // Attempt Versium contact enrichment. enrichContact has its own timeout
+      // and never throws, and runEnrichment additionally guards persistence, so
+      // a slow/failed provider can never block or crash webhook ingestion. The
+      // event is already stored, so we return 202 regardless of the outcome.
+      let enrichmentStatus: string | undefined;
+      if (isVersiumConfigured()) {
+        await runEnrichment(event);
+        const updated = await getVisitorCaptureEvent(event.id);
+        enrichmentStatus = updated?.enrichmentStatus;
+      } else {
+        await updateVisitorCaptureEnrichment(event.id, {
+          enrichmentStatus: "skipped",
+          enrichmentProvider: "versium",
+          enrichmentError: "not_configured",
+        });
+        enrichmentStatus = "skipped";
+      }
+
+      return res.status(202).json({ ok: true, id: event.id, enrichmentStatus });
     } catch (error) {
       return next(error);
     }
@@ -912,6 +1002,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return next(error);
     }
   });
+
+  // Manually re-run Versium enrichment for a single captured event. Useful when
+  // VERSIUM_API_KEY was added after capture, or to retry a transient failure.
+  app.post(
+    "/api/admin/visitor-capture-events/:id/enrich",
+    requireAdminSecret,
+    async (req, res, next) => {
+      try {
+        const id = String(req.params.id);
+        const event = await getVisitorCaptureEvent(id);
+        if (!event) {
+          return res.status(404).json({ ok: false, message: "Event not found." });
+        }
+        if (!isVersiumConfigured()) {
+          await updateVisitorCaptureEnrichment(event.id, {
+            enrichmentStatus: "skipped",
+            enrichmentProvider: "versium",
+            enrichmentError: "not_configured",
+          });
+        } else {
+          await runEnrichment(event);
+        }
+        const updated = await getVisitorCaptureEvent(event.id);
+        return res.json(updated);
+      } catch (error) {
+        return next(error);
+      }
+    },
+  );
 
   app.get("/api/admin/agents", (_req, res) => {
     return res.json(

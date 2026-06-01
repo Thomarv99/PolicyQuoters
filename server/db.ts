@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS visitor_capture_events (
 
 CREATE INDEX IF NOT EXISTS visitor_capture_events_received_idx ON visitor_capture_events(received_at DESC);
 CREATE INDEX IF NOT EXISTS visitor_capture_events_email_idx ON visitor_capture_events(email);
+
+-- Forward-compatible: add Versium contact-enrichment columns for existing deployments.
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_status TEXT;
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_provider TEXT;
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_requested_at TIMESTAMPTZ;
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_completed_at TIMESTAMPTZ;
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_error TEXT;
+ALTER TABLE visitor_capture_events ADD COLUMN IF NOT EXISTS enrichment_payload JSONB;
 `;
 
 export async function ensureDatabaseReady(): Promise<boolean> {

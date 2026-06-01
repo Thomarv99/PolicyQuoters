@@ -31,6 +31,12 @@ type CapturedContact = {
   utmMedium?: string;
   utmCampaign?: string;
   rawPayload?: unknown;
+  enrichmentStatus?: string;
+  enrichmentProvider?: string;
+  enrichmentRequestedAt?: string;
+  enrichmentCompletedAt?: string;
+  enrichmentError?: string;
+  enrichmentPayload?: unknown;
 };
 
 type FetchState =
@@ -65,6 +71,48 @@ function formatDate(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString();
+}
+
+function EnrichmentBadge({ status }: { status?: string }) {
+  const variant: "default" | "secondary" | "destructive" | "outline" =
+    status === "success"
+      ? "default"
+      : status === "failure"
+        ? "destructive"
+        : status === "no_match"
+          ? "outline"
+          : "secondary";
+  return (
+    <Badge variant={variant} className="rounded-full text-[11px]">
+      {status ?? "pending"}
+    </Badge>
+  );
+}
+
+// Pulls out the first record's appended phone/email/address from a Versium
+// Contact Append response across the shapes the API may return, for a quick
+// summary in the detail drawer. Returns label/value pairs of non-empty fields.
+function summarizeEnrichment(payload: unknown): { label: string; value: string }[] {
+  if (!payload || typeof payload !== "object") return [];
+  const body = payload as Record<string, unknown>;
+  const versium = (body.versium as Record<string, unknown> | undefined) ?? undefined;
+  const resultsRaw = versium?.results ?? body.results;
+  const first = Array.isArray(resultsRaw)
+    ? resultsRaw[0]
+    : resultsRaw && typeof resultsRaw === "object"
+      ? (Object.values(resultsRaw as Record<string, unknown>)[0] as unknown)
+      : undefined;
+  if (!first || typeof first !== "object") return [];
+  const record = first as Record<string, unknown>;
+  const out: { label: string; value: string }[] = [];
+  for (const [key, value] of Object.entries(record)) {
+    if (value == null) continue;
+    const str = Array.isArray(value) ? value.join(", ") : String(value);
+    if (str.trim().length === 0) continue;
+    out.push({ label: key, value: str });
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 // Columns exported to CSV. Intentionally excludes the admin secret and any
@@ -125,6 +173,7 @@ export default function AdminCapturedContacts() {
   const [filter, setFilter] = useState("");
   const [state, setState] = useState<FetchState>({ status: "idle" });
   const [detail, setDetail] = useState<CapturedContact | null>(null);
+  const [enriching, setEnriching] = useState<string | null>(null);
 
   async function load(currentLimit = limit) {
     if (!secret.trim()) {
@@ -155,6 +204,32 @@ export default function AdminCapturedContacts() {
         status: "error",
         message: error instanceof Error ? error.message : "Network error while fetching contacts.",
       });
+    }
+  }
+
+  async function reEnrich(id: string) {
+    if (!secret.trim()) return;
+    setEnriching(id);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/admin/visitor-capture-events/${encodeURIComponent(id)}/enrich`,
+        {
+          method: "POST",
+          headers: { "X-PolicyQuoters-Admin-Secret": secret.trim() },
+        },
+      );
+      if (!res.ok) return;
+      const updated = (await res.json()) as CapturedContact;
+      setState((prev) =>
+        prev.status === "loaded"
+          ? { status: "loaded", events: prev.events.map((e) => (e.id === id ? updated : e)) }
+          : prev,
+      );
+      setDetail((prev) => (prev && prev.id === id ? updated : prev));
+    } catch {
+      /* surfaced via unchanged status; admin can retry */
+    } finally {
+      setEnriching(null);
     }
   }
 
@@ -347,6 +422,7 @@ export default function AdminCapturedContacts() {
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">Source</th>
+                  <th className="px-4 py-3 font-medium">Enrichment</th>
                   <th className="px-4 py-3 font-medium">Page</th>
                   <th className="px-4 py-3 font-medium">UTM</th>
                   <th className="px-4 py-3 font-medium" />
@@ -360,6 +436,7 @@ export default function AdminCapturedContacts() {
                     <td className="px-4 py-3">{fullName(event) || <span className="text-muted-foreground">&mdash;</span>}</td>
                     <td className="whitespace-nowrap px-4 py-3">{event.phone || <span className="text-muted-foreground">&mdash;</span>}</td>
                     <td className="px-4 py-3">{event.source || <span className="text-muted-foreground">&mdash;</span>}</td>
+                    <td className="px-4 py-3"><EnrichmentBadge status={event.enrichmentStatus} /></td>
                     <td className="max-w-[220px] truncate px-4 py-3 text-muted-foreground" title={event.pageUrl}>{event.pageUrl || <span>&mdash;</span>}</td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {[event.utmSource, event.utmMedium, event.utmCampaign].filter(Boolean).join(" / ") || <span>&mdash;</span>}
@@ -408,6 +485,58 @@ export default function AdminCapturedContacts() {
               <Field label="Referrer" value={detail.referrer} />
               <Field label="IP address" value={detail.ipAddress} />
               <Field label="User agent" value={detail.userAgent} />
+
+              <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Contact enrichment
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={enriching === detail.id}
+                    onClick={() => void reEnrich(detail.id)}
+                    data-testid={`button-enrich-${detail.id}`}
+                  >
+                    {enriching === detail.id ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    Re-enrich
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <EnrichmentBadge status={detail.enrichmentStatus} />
+                  {detail.enrichmentProvider ? (
+                    <span className="text-xs text-muted-foreground">via {detail.enrichmentProvider}</span>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Requested" value={detail.enrichmentRequestedAt ? formatDate(detail.enrichmentRequestedAt) : undefined} />
+                  <Field label="Completed" value={detail.enrichmentCompletedAt ? formatDate(detail.enrichmentCompletedAt) : undefined} />
+                </div>
+                <Field label="Error" value={detail.enrichmentError} />
+                {summarizeEnrichment(detail.enrichmentPayload).length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Appended fields</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {summarizeEnrichment(detail.enrichmentPayload).map((field) => (
+                        <Field key={field.label} label={field.label} value={field.value} />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {detail.enrichmentPayload != null ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Versium raw response</p>
+                    <pre className="max-h-80 overflow-auto rounded-xl border border-border bg-background p-3 text-xs" data-testid="text-versium-raw">
+                      {JSON.stringify(detail.enrichmentPayload, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
+              </div>
+
               <div className="space-y-1.5">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Raw payload</p>
                 <pre className="max-h-80 overflow-auto rounded-xl border border-border bg-muted/40 p-3 text-xs" data-testid="text-raw-payload">

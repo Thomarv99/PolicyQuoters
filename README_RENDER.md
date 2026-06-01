@@ -192,6 +192,43 @@ Security notes:
 - Generate a **separate** unique random value for `POLICYQUOTERS_ADMIN_API_SECRET` (do not reuse `GETEMAILS_WEBHOOK_SECRET`). Set it only in the Render dashboard, never in committed files. The values shown above are placeholders.
 - Because this endpoint receives and stores enriched visitor contact details, keep the **Privacy Policy** (`/privacy-policy`) aligned with what is collected, stored, and shared.
 
+#### Versium Contact Append enrichment
+
+After a visitor-capture event is received and stored, the server automatically attempts to enrich the contact using the [Versium Contact Append API](https://api-documentation.versium.com/reference/contact-append-api). This appends data such as mobile/landline phone, email, and postal address from the contact's name/email/phone/address. The enrichment outcome (status, timestamps, error, and the raw Versium response) is saved on the event and shown on the captured-contacts admin page.
+
+Enrichment runs **only when `VERSIUM_API_KEY` is set**. If it is missing, the event is still stored and the enrichment status is recorded as `skipped` (`not_configured`) — webhook ingestion is never affected. If Versium returns `401/429/5xx` or no match, the event is still stored with a `failure` or `no_match` status and a concise error message. The API key is **never logged**.
+
+Set the Versium env vars in Render → **Environment**:
+
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `VERSIUM_API_KEY` | No (enrichment is optional) | _none_ | Your Versium API key. Sent as the case-sensitive `x-versium-api-Key` request header. When unset, enrichment is skipped. Set only in the Render dashboard — never commit it. |
+| `VERSIUM_CONTACT_APPEND_OUTPUTS` | No | `phone_mobile,email,address` | Comma-separated `output[]` values. Allowed: `phone`, `phone_mobile`, `phone_multiple`, `phone_mobile_multiple`, `email`, `email_multiple`, `address`. Only **one** phone-type value is allowed per query — extra phone types are dropped automatically. |
+| `VERSIUM_MATCH_TYPE` | No | `indiv` | `indiv` (individual) or `hhld` (household). |
+| `VERSIUM_MAX_RECS` | No | `1` | Max records to return per query, clamped to `1`–`100` (`cfg_maxrecs`). |
+| `VERSIUM_TIMEOUT_MS` | No | `9000` | Request timeout in milliseconds, clamped to `1000`–`30000`. The webhook still returns `202` if the call times out. |
+
+Render environment values to add (example):
+
+```text
+VERSIUM_API_KEY=YOUR_VERSIUM_API_KEY
+VERSIUM_CONTACT_APPEND_OUTPUTS=phone_mobile,email,address
+VERSIUM_MATCH_TYPE=indiv
+VERSIUM_MAX_RECS=1
+VERSIUM_TIMEOUT_MS=9000
+```
+
+You can also re-run enrichment for a single event (e.g. after adding the key, or to retry a transient failure):
+
+```bash
+curl -X POST -H "X-PolicyQuoters-Admin-Secret: YOUR_RANDOM_ADMIN_SECRET" \
+  "https://www.policyquoters.com/api/admin/visitor-capture-events/<EVENT_ID>/enrich"
+```
+
+The captured-contacts admin page also has a **Re-enrich** button in each contact's detail drawer.
+
+> **Billing note:** Versium Contact Append calls may consume match credits / billable usage on your Versium account each time a query is sent (including manual re-enrichment). Configure `VERSIUM_*` only when you intend to incur that usage.
+
 ## 3. Add the custom domain
 
 The current SEO metadata uses `https://www.policyquoters.com` as the canonical site URL.

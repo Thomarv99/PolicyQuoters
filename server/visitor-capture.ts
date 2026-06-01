@@ -29,10 +29,20 @@ export type VisitorCaptureInput = {
   rawPayload: unknown;
 };
 
-export type VisitorCaptureEvent = VisitorCaptureInput & {
-  id: string;
-  receivedAt: string;
+export type VisitorCaptureEnrichment = {
+  enrichmentStatus?: string;
+  enrichmentProvider?: string;
+  enrichmentRequestedAt?: string;
+  enrichmentCompletedAt?: string;
+  enrichmentError?: string;
+  enrichmentPayload?: unknown;
 };
+
+export type VisitorCaptureEvent = VisitorCaptureInput &
+  VisitorCaptureEnrichment & {
+    id: string;
+    receivedAt: string;
+  };
 
 const memEvents = new Map<string, VisitorCaptureEvent>();
 
@@ -58,6 +68,16 @@ function rowToEvent(row: Record<string, unknown>): VisitorCaptureEvent {
     utmCampaign: (row.utm_campaign as string | null) ?? undefined,
     rawPayload: row.raw_payload as unknown,
     receivedAt: new Date(row.received_at as string).toISOString(),
+    enrichmentStatus: (row.enrichment_status as string | null) ?? undefined,
+    enrichmentProvider: (row.enrichment_provider as string | null) ?? undefined,
+    enrichmentRequestedAt: row.enrichment_requested_at
+      ? new Date(row.enrichment_requested_at as string).toISOString()
+      : undefined,
+    enrichmentCompletedAt: row.enrichment_completed_at
+      ? new Date(row.enrichment_completed_at as string).toISOString()
+      : undefined,
+    enrichmentError: (row.enrichment_error as string | null) ?? undefined,
+    enrichmentPayload: (row.enrichment_payload as unknown) ?? undefined,
   };
 }
 
@@ -98,6 +118,54 @@ export async function recordVisitorCaptureEvent(input: VisitorCaptureInput): Pro
   const stored: VisitorCaptureEvent = { ...input, id, receivedAt };
   memEvents.set(id, stored);
   return stored;
+}
+
+// Persists the outcome of a Versium enrichment attempt onto an existing event.
+// Safe to call from background tasks; returns the updated event or null if the
+// event no longer exists.
+export async function updateVisitorCaptureEnrichment(
+  id: string,
+  enrichment: VisitorCaptureEnrichment,
+): Promise<VisitorCaptureEvent | null> {
+  if (useDb()) {
+    const result = await query(
+      `UPDATE visitor_capture_events SET
+        enrichment_status = $2,
+        enrichment_provider = $3,
+        enrichment_requested_at = $4,
+        enrichment_completed_at = $5,
+        enrichment_error = $6,
+        enrichment_payload = $7::jsonb
+      WHERE id = $1
+      RETURNING *`,
+      [
+        id,
+        enrichment.enrichmentStatus ?? null,
+        enrichment.enrichmentProvider ?? null,
+        enrichment.enrichmentRequestedAt ?? null,
+        enrichment.enrichmentCompletedAt ?? null,
+        enrichment.enrichmentError ?? null,
+        enrichment.enrichmentPayload === undefined
+          ? null
+          : JSON.stringify(enrichment.enrichmentPayload),
+      ],
+    );
+    return result.rows[0] ? rowToEvent(result.rows[0]) : null;
+  }
+
+  const existing = memEvents.get(id);
+  if (!existing) return null;
+  const updated: VisitorCaptureEvent = { ...existing, ...enrichment };
+  memEvents.set(id, updated);
+  return updated;
+}
+
+export async function getVisitorCaptureEvent(id: string): Promise<VisitorCaptureEvent | null> {
+  if (useDb()) {
+    const result = await query("SELECT * FROM visitor_capture_events WHERE id = $1", [id]);
+    return result.rows[0] ? rowToEvent(result.rows[0]) : null;
+  }
+  return memEvents.get(id) ?? null;
 }
 
 export async function listVisitorCaptureEvents(limit: number): Promise<VisitorCaptureEvent[]> {
