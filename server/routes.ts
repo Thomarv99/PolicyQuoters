@@ -43,6 +43,11 @@ import {
 import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from "./hexure";
 import { ensureDatabaseReady, hasDatabaseUrl } from "./db";
 import {
+  listVisitorCaptureEvents,
+  recordVisitorCaptureEvent,
+  type VisitorCaptureInput,
+} from "./visitor-capture";
+import {
   loadAgentCases,
   loadAgentDirectory,
   loadAgentProfile,
@@ -718,6 +723,99 @@ async function hydrateAgentState() {
   }
 }
 
+const GE_ACCOUNT_KEY = "R18HJ289";
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) return trimmed;
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function getNested(obj: unknown, ...keys: string[]): unknown {
+  let cursor: unknown = obj;
+  for (const key of keys) {
+    if (cursor && typeof cursor === "object" && key in (cursor as Record<string, unknown>)) {
+      cursor = (cursor as Record<string, unknown>)[key];
+    } else {
+      return undefined;
+    }
+  }
+  return cursor;
+}
+
+// Extract a best-effort client IP from common proxy headers (Render sits behind
+// a proxy, so req.ip is the proxy). We never trust this for auth, only logging.
+function extractClientIp(headers: Record<string, unknown>, fallback?: string): string | undefined {
+  const forwarded = headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    return forwarded.split(",")[0]?.trim() || undefined;
+  }
+  const realIp = headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.length > 0) return realIp.trim();
+  return fallback || undefined;
+}
+
+function buildVisitorCaptureInput(
+  body: unknown,
+  headers: Record<string, unknown>,
+  fallbackIp?: string,
+): VisitorCaptureInput {
+  const payload = (body && typeof body === "object" ? (body as Record<string, unknown>) : {}) as Record<
+    string,
+    unknown
+  >;
+
+  const email = pickString(
+    payload.email,
+    payload.email_address,
+    getNested(payload, "contact", "email"),
+    getNested(payload, "person", "email"),
+  );
+  const firstName = pickString(
+    payload.first_name,
+    payload.firstName,
+    getNested(payload, "contact", "first_name"),
+    getNested(payload, "person", "first_name"),
+  );
+  const lastName = pickString(
+    payload.last_name,
+    payload.lastName,
+    getNested(payload, "contact", "last_name"),
+    getNested(payload, "person", "last_name"),
+  );
+  const phone = pickString(
+    payload.phone,
+    payload.phone_number,
+    payload.phoneNumber,
+    getNested(payload, "contact", "phone"),
+  );
+  const pageUrl = pickString(payload.page_url, payload.pageUrl, payload.url, payload.page);
+  const referrer = pickString(payload.referrer, payload.referer);
+
+  return {
+    source: pickString(payload.source, headers["x-policyquoters-webhook-source"]) ?? "getemails",
+    accountKey: pickString(payload.account_key, payload.accountKey) ?? GE_ACCOUNT_KEY,
+    email,
+    firstName,
+    lastName,
+    phone,
+    pageUrl,
+    referrer,
+    ipAddress: extractClientIp(headers, fallbackIp),
+    userAgent: pickString(headers["user-agent"]),
+    utmSource: pickString(payload.utm_source, payload.utmSource, getNested(payload, "utm", "source")),
+    utmMedium: pickString(payload.utm_medium, payload.utmMedium, getNested(payload, "utm", "medium")),
+    utmCampaign: pickString(payload.utm_campaign, payload.utmCampaign, getNested(payload, "utm", "campaign")),
+    rawPayload: body ?? null,
+  };
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await hydrateAgentState();
 
@@ -735,6 +833,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/healthz", (_req, res) => {
     return res.status(200).json({ status: "ok" });
+  });
+
+  // Webhook receiver for the GetEmails (GE) visitor capture tool. Authenticated
+  // via the X-PolicyQuoters-Webhook-Secret header compared to the
+  // GETEMAILS_WEBHOOK_SECRET env var. Accepts arbitrary JSON; stores the raw
+  // payload plus best-effort extracted contact fields.
+  app.post("/api/webhooks/visitor-capture", async (req, res, next) => {
+    const expectedSecret = process.env.GETEMAILS_WEBHOOK_SECRET?.trim();
+    const providedSecret = req.header("x-policyquoters-webhook-secret");
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (expectedSecret && expectedSecret.length > 0) {
+      if (providedSecret !== expectedSecret) {
+        // Never log the secret (expected or provided).
+        return res.status(401).json({ ok: false, message: "Invalid or missing webhook secret." });
+      }
+    } else if (isProduction) {
+      // Fail closed in production so we never run an open ingestion endpoint.
+      console.error(
+        "[visitor-capture] GETEMAILS_WEBHOOK_SECRET is not set in production. Rejecting webhook to avoid open ingestion.",
+      );
+      return res.status(503).json({
+        ok: false,
+        message: "Webhook receiver is not configured.",
+      });
+    } else {
+      console.warn(
+        "[visitor-capture] GETEMAILS_WEBHOOK_SECRET is not set. Accepting webhook without authentication (non-production only).",
+      );
+    }
+
+    try {
+      const input = buildVisitorCaptureInput(req.body, req.headers as Record<string, unknown>, req.ip);
+      const event = await recordVisitorCaptureEvent(input);
+      return res.status(202).json({ ok: true, id: event.id });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get("/api/admin/visitor-capture-events", async (req, res, next) => {
+    try {
+      const limitParam = Number.parseInt(String(req.query.limit ?? "100"), 10);
+      const limit = Number.isFinite(limitParam) ? limitParam : 100;
+      const events = await listVisitorCaptureEvents(limit);
+      return res.json(events);
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get("/api/admin/agents", (_req, res) => {

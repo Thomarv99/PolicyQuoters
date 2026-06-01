@@ -121,6 +121,28 @@ CREATE TABLE IF NOT EXISTS agent_cases (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS visitor_capture_events (
+  id TEXT PRIMARY KEY,
+  source TEXT,
+  account_key TEXT,
+  email TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  phone TEXT,
+  page_url TEXT,
+  referrer TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  raw_payload JSONB NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS visitor_capture_events_received_idx ON visitor_capture_events(received_at DESC);
+CREATE INDEX IF NOT EXISTS visitor_capture_events_email_idx ON visitor_capture_events(email);
 `;
 
 export async function ensureDatabaseReady(): Promise<boolean> {

@@ -103,6 +103,44 @@ A GetEmails (GE) visitor-identification / contact-enrichment script is embedded 
 - It is not gated by an env var; the account key is hardcoded in the head. To change keys or remove the tool, edit `client/index.html`.
 - Because this tool can capture/enrich visitor contact information, keep the **Privacy Policy** (`/privacy-policy`) aligned with the visitor-identification, contact-enrichment, and analytics tools actually deployed. If you add, remove, or swap tracking tools, update the policy's cookies/analytics and third-party sections and the opt-out language accordingly.
 
+#### Receiving GE data via the secure webhook
+
+GetEmails can POST the contact details it captures to our own server through its **Connect Webhook** feature. The server exposes a secure receiver at `POST /api/webhooks/visitor-capture` that authenticates the request, stores the raw payload plus best-effort extracted fields (email, name, phone, page URL, referrer, UTM params, IP, user agent) in the `visitor_capture_events` table (in-memory fallback when `DATABASE_URL` is unset), and returns `202 { "ok": true, "id": "..." }`.
+
+Configure these fields in the GetEmails **Connect Webhook** screen:
+
+| Field | Value |
+| --- | --- |
+| **Webhook URL** | `https://www.policyquoters.com/api/webhooks/visitor-capture` |
+| **Custom JSON Data** | `{ "source": "getemails", "site": "policyquoters", "account_key": "R18HJ289" }` |
+| **Custom Headers (JSON format)** | `{ "X-PolicyQuoters-Webhook-Source": "getemails", "X-PolicyQuoters-Webhook-Secret": "YOUR_RANDOM_SECRET" }` |
+
+Then set the matching secret in Render → **Environment**:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `GETEMAILS_WEBHOOK_SECRET` | Yes (for production) | A long random string you generate (e.g. `openssl rand -hex 32`). The webhook only accepts requests whose `X-PolicyQuoters-Webhook-Secret` header **exactly matches** this value. In production, if this var is **missing**, the endpoint fails closed and returns `503` so we never run an open ingestion endpoint. In local/dev (non-production), a missing secret logs a warning and accepts the request. The secret is **never logged**. |
+
+Authentication behavior:
+
+- **Secret set + header matches** → `202 { ok: true, id }` and the event is stored.
+- **Secret set + header missing/wrong** → `401`.
+- **Secret missing in production** → `503` (fail closed).
+- **Secret missing in non-production** → accepted with a warning (local dev convenience only).
+
+View recent captured events (newest first) at:
+
+```text
+GET https://www.policyquoters.com/api/admin/visitor-capture-events?limit=100
+```
+
+This admin read endpoint follows the same open-access pattern as the other `/api/admin/*` routes in this prototype; gate it behind real auth before exposing it broadly.
+
+Security notes:
+
+- Generate a unique random value for `GETEMAILS_WEBHOOK_SECRET`. **Do not paste the real secret into GitHub** (README, `render.yaml`, or code) — set it only in the Render dashboard and in the GetEmails Custom Headers field. The values shown above are placeholders.
+- Because this endpoint receives and stores enriched visitor contact details, keep the **Privacy Policy** (`/privacy-policy`) aligned with what is collected, stored, and shared.
+
 ## 3. Add the custom domain
 
 The current SEO metadata uses `https://www.policyquoters.com` as the canonical site URL.
