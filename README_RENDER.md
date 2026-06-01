@@ -95,6 +95,14 @@ Per-landing-page overrides are also available in the admin builder (`/admin/land
 - The utility is resilient: if `fbq` is blocked by an ad blocker, the Pixel ID is missing, or the script fails to load, the funnel continues to work normally with no console noise.
 - Each tracked event gets a stable `event_id` for future Meta Conversions API deduplication.
 
+### GetEmails (GE) visitor capture
+
+A GetEmails (GE) visitor-identification / contact-enrichment script is embedded **globally** in the HTML head (`client/index.html`) with account key **`R18HJ289`**. It loads on every page, including the landing page funnel (`/lp/:slug`), and runs client-side from `s3-us-west-2.amazonaws.com/jsstore/a/R18HJ289/ge.js`.
+
+- The snippet self-guards against duplicate inclusion (`geq.invoked`), so it is safe even if a page mounts/unmounts repeatedly.
+- It is not gated by an env var; the account key is hardcoded in the head. To change keys or remove the tool, edit `client/index.html`.
+- Because this tool can capture/enrich visitor contact information, keep the **Privacy Policy** (`/privacy-policy`) aligned with the visitor-identification, contact-enrichment, and analytics tools actually deployed. If you add, remove, or swap tracking tools, update the policy's cookies/analytics and third-party sections and the opt-out language accordingly.
+
 ## 3. Add the custom domain
 
 The current SEO metadata uses `https://www.policyquoters.com` as the canonical site URL.

@@ -733,7 +733,7 @@ export function PrivacyPolicyPage() {
             <p>When you visit the Site we automatically collect: IP address, device and browser type, operating system, referring and exit pages, pages viewed, the date and time of access, and similar diagnostic data. We use cookies, pixels, local storage, and similar technologies to operate the Site, remember preferences, measure performance, and support marketing.</p>
 
             <h3>1.5 Information from third parties</h3>
-            <p>We may receive information from licensed insurance brokers, carriers, lead and marketing partners, identity-verification providers, and publicly available sources. For example, a broker you choose may share status updates about an application you submitted through the Site.</p>
+            <p>We may receive information from licensed insurance brokers, carriers, lead and marketing partners, identity-verification providers, visitor-identification and contact-enrichment services, and publicly available sources. For example, a broker you choose may share status updates about an application you submitted through the Site, and a visitor-identification service may help us associate a Site visit with contact details so we can follow up.</p>
 
             <h2>2. How We Use Information</h2>
             <ul>
@@ -760,7 +760,8 @@ export function PrivacyPolicyPage() {
 
             <h2>4. Cookies, Analytics, and Online Advertising</h2>
             <p>We use cookies and similar technologies to keep you signed in, remember your quote progress, understand Site usage, and measure marketing performance. We may use third-party analytics services and advertising partners that set their own cookies and identifiers. You can control cookies through your browser settings. Disabling cookies may affect Site functionality.</p>
-            <p>Some browsers offer a &ldquo;Do Not Track&rdquo; signal. Because there is no consistent industry standard for responding to such signals, we currently do not respond to them, but we honor opt-out preference signals where required by applicable law.</p>
+            <p>We also use third-party visitor-identification and contact-enrichment tools that run as scripts or pixels on the Site. These tools may help us recognize returning visitors and, in some cases, associate a visit with contact details (such as a name or email address) so we can follow up about insurance products you looked at. They may set their own cookies or identifiers and may combine the information they collect with data from other sources. We use what we learn from these tools for analytics and marketing follow-up, consistent with this policy and applicable law.</p>
+            <p>If you would prefer that we not use this kind of visitor identification or enrichment for you, or you want us to stop marketing follow-up, you can opt out by contacting us at the email in the &ldquo;How to Contact Us&rdquo; section or by managing cookies in your browser. Some browsers offer a &ldquo;Do Not Track&rdquo; signal. Because there is no consistent industry standard for responding to such signals, we currently do not respond to them, but we honor opt-out preference signals where required by applicable law.</p>
 
             <h2>5. Security</h2>
             <p>We use administrative, technical, and physical safeguards designed to protect personal information, including encryption in transit, restricted access, and monitoring. No system is perfectly secure, and we cannot guarantee absolute security. You are responsible for keeping your account credentials confidential.</p>
