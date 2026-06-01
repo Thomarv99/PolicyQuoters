@@ -13,6 +13,7 @@ import {
   trackCustomEvent,
   trackStandardEvent,
 } from "@/lib/meta-pixel";
+import { trackGaEvent } from "@/lib/ga";
 import type {
   LandingContact,
   LandingPagePublic,
@@ -326,6 +327,13 @@ export default function LandingPageView() {
       },
       { pixelId: pagePixelId, eventId: newEventId("vc") },
     );
+    trackGaEvent("landing_page_viewed", {
+      landing_page_slug: landingPage.slug,
+      landing_page_id: landingPage.id,
+      product_type: "life_insurance",
+      licensed_state_count: landingPage.licensedStates.length,
+      licensed_carrier_count: landingPage.licensedCarriers.length,
+    });
   }, [landingPage, pagePixelId]);
 
   const allowedStates = useMemo(() => landingPage?.licensedStates ?? [], [landingPage]);
@@ -342,6 +350,11 @@ export default function LandingPageView() {
         },
         { pixelId: pagePixelId, eventId: newEventId("qs") },
       );
+      trackGaEvent("quote_flow_started", {
+        landing_page_slug: landingPage.slug,
+        landing_page_id: landingPage.id,
+        product_type: "life_insurance",
+      });
     }
     setStep("age");
   };
@@ -372,6 +385,18 @@ export default function LandingPageView() {
         },
         { pixelId: pagePixelId, eventId: leadEventId },
       );
+      trackGaEvent("quote_contact_submitted", {
+        landing_page_slug: landingPage?.slug,
+        landing_page_id: landingPage?.id,
+        product_type: "life_insurance",
+        state: answers.state,
+        coverage_amount: answers.coverageAmount,
+        coverage_tier: coverageTier(answers.coverageAmount),
+        smoker: answers.smoker,
+        health_class: answers.health,
+        gender: answers.gender,
+        age_range: answers.ageRange,
+      });
       const res = await apiRequest("POST", "/api/landing-quotes", payload);
       return (await res.json()) as LandingQuoteResponse;
     },
@@ -397,6 +422,18 @@ export default function LandingPageView() {
         },
         { pixelId: pagePixelId, eventId: quotesEventId },
       );
+      trackGaEvent("quotes_generated", {
+        landing_page_slug: landingPage?.slug,
+        landing_page_id: landingPage?.id,
+        product_type: "life_insurance",
+        quotes_count: data.options.length,
+        source: data.source,
+        state: answers.state,
+        coverage_amount: answers.coverageAmount,
+        coverage_tier: coverageTier(answers.coverageAmount),
+        smoker: answers.smoker,
+        health_class: answers.health,
+      });
     },
     onError: (error: Error) => {
       setErrorMessage(error.message || "Could not generate quotes. Please try again.");
@@ -425,6 +462,19 @@ export default function LandingPageView() {
         },
         { pixelId: pagePixelId, eventId: selectEventId },
       );
+      trackGaEvent("quote_selected", {
+        landing_page_slug: landingPage?.slug,
+        landing_page_id: landingPage?.id,
+        product_type: option.productType,
+        carrier_name: option.carrierName,
+        product_name: option.productName,
+        coverage_amount: option.coverageAmount,
+        coverage_tier: coverageTier(option.coverageAmount),
+        term_length: option.termLength,
+        monthly_premium: option.monthlyPremium,
+        annual_premium: option.annualPremium,
+        source: option.source,
+      });
       const res = await apiRequest("POST", "/api/landing-quotes/select", {
         submissionId: response?.submissionId,
         selectedQuoteId: option.quoteId,

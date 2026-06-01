@@ -20,7 +20,7 @@ In Render:
 | Build command | `npm ci --include=dev && npm run build` |
 | Start command | `npm start` |
 | Health check path | `/healthz` |
-| Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/` (plus the Hexure / Supabase vars below if you want live data) |
+| Environment variables | `NODE_ENV=production`, `VITE_ASSET_BASE=/`, `VITE_GA_MEASUREMENT_ID=G-R5NXRQVS7Z` (plus the Hexure / Supabase vars below if you want live data) |
 
 The included `render.yaml` can also be used as a Render Blueprint.
 
@@ -94,6 +94,28 @@ Per-landing-page overrides are also available in the admin builder (`/admin/land
 - **No PII is sent to Meta.** Tracking params are limited to non-identifying funnel signals (landing page slug, state, coverage tier, smoker flag, health class, gender, age range, carrier/product names on selection). Names, emails, phone numbers, addresses, and ZIP codes are **never** sent to Meta from the Pixel. If you later wire the Conversions API server-side, hash any user identifiers per Meta's spec.
 - The utility is resilient: if `fbq` is blocked by an ad blocker, the Pixel ID is missing, or the script fails to load, the funnel continues to work normally with no console noise.
 - Each tracked event gets a stable `event_id` for future Meta Conversions API deduplication.
+
+### Google Analytics 4 tracking
+
+GA4 (`gtag.js`) loads **globally** on every page — the public website, consumer quote flows (`/app`, `/quotes`), admin/agent pages, and landing pages (`/lp/:slug`). It is initialized once in `client/src/main.tsx` and the SPA router (`client/src/App.tsx`) sends a `page_view` on every route change (gtag's automatic page_view is disabled so single-page navigations are tracked accurately).
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `VITE_GA_MEASUREMENT_ID` | No | GA4 measurement ID (format `G-XXXXXXXXXX`). Defaults to `G-R5NXRQVS7Z` when unset. Set it in Render → **Environment** to override or disable via a different property. |
+
+Set in Render:
+
+```
+VITE_GA_MEASUREMENT_ID=G-R5NXRQVS7Z
+```
+
+In addition to page views, the funnel emits these GA4 events (non-PII params only): `landing_page_viewed`, `quote_flow_started`, `quote_contact_submitted`, `quotes_generated`, `quote_selected`, and `lead_submitted_to_agent`.
+
+**Important:**
+
+- `VITE_*` env vars are baked into the Vite client bundle at build time. Changing `VITE_GA_MEASUREMENT_ID` requires a **manual deploy / rebuild** on Render before it takes effect on the live site.
+- **No PII is sent to GA.** Event params are limited to non-identifying funnel signals (line type, state, coverage amount/tier, smoker flag, term length, carrier/product names, landing page slug/ID, premium figures). Names, emails, phone numbers, addresses, ZIP codes, and raw health details are **never** sent to GA.
+- The utility is resilient: if `gtag` is blocked by an ad blocker, the measurement ID is missing/invalid, or the script fails to load, the funnel continues to work normally with no console noise.
 
 ### GetEmails (GE) visitor capture
 

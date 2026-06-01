@@ -1,4 +1,6 @@
-import { Switch, Route, Router } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, Router, useLocation } from "wouter";
+import { trackPageView } from "./lib/ga";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,6 +21,17 @@ function routerBase() {
   const indexPath = "/index.html";
   if (!path.endsWith(indexPath)) return "";
   return path;
+}
+
+function RouteAnalytics() {
+  // wouter's location updates on every SPA navigation. We read the real
+  // window path so the page_view reflects base path + query, not just the
+  // router-relative segment.
+  const [location] = useLocation();
+  useEffect(() => {
+    trackPageView();
+  }, [location]);
+  return null;
 }
 
 function AppRouter() {
@@ -51,6 +64,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router base={routerBase()}>
+          <RouteAnalytics />
           <AppRouter />
         </Router>
       </TooltipProvider>

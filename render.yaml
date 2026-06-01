@@ -12,3 +12,5 @@ services:
         value: production
       - key: VITE_ASSET_BASE
         value: /
+      - key: VITE_GA_MEASUREMENT_ID
+        value: G-R5NXRQVS7Z

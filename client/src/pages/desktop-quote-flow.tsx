@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { coverageTier, trackGaEvent } from "@/lib/ga";
 import type {
   ApplicationIntake,
   AssignmentResponse,
@@ -1477,8 +1478,20 @@ export default function DesktopQuoteFlow() {
   const [signature, setSignature] = useState("");
   const [assignment, setAssignment] = useState<AssignmentResponse | undefined>();
   const [brokerName] = useState<string | undefined>(initialBroker);
+  const flowStartedRef = useRef(false);
 
   const selectedLine = lineTypes.find((line) => line.id === quote.lineType) ?? lineTypes[0];
+
+  // Non-PII funnel signals shared across GA events for this consumer flow.
+  const quoteSignals = () => ({
+    flow: "desktop_quote",
+    line_type: quote.lineType,
+    state: quote.state,
+    coverage_amount: quote.faceAmount,
+    coverage_tier: coverageTier(quote.faceAmount),
+    smoker: quote.tobacco,
+    term_length: quote.termLength,
+  });
 
   useEffect(() => {
     document.title = `Get ${selectedLine.title} Quotes Online | PolicyQuoters`;
@@ -1500,12 +1513,19 @@ export default function DesktopQuoteFlow() {
   }, [selectedLine.title]);
 
   const quoteMutation = useMutation({
-    mutationFn: async () =>
-      (await apiRequest("POST", "/api/quotes", quote)).json() as Promise<QuoteResponse>,
+    mutationFn: async () => {
+      trackGaEvent("quote_contact_submitted", quoteSignals());
+      return (await apiRequest("POST", "/api/quotes", quote)).json() as Promise<QuoteResponse>;
+    },
     onSuccess: (data) => {
       setQuoteResponse(data);
       setSelected(data.options[0]);
       setStage("results");
+      trackGaEvent("quotes_generated", {
+        ...quoteSignals(),
+        quotes_count: data.options.length,
+        recommended_carrier: data.summary.recommendedCarrier,
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
   });
@@ -1525,9 +1545,24 @@ export default function DesktopQuoteFlow() {
     onSuccess: (data) => {
       setAssignment(data);
       setStage("confirmed");
+      trackGaEvent("lead_submitted_to_agent", {
+        ...quoteSignals(),
+        carrier_name: selected?.carrierName,
+        product_type: selected?.productType,
+        monthly_premium: selected?.monthlyPremium,
+        annual_premium: selected?.annualPremium,
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
   });
+
+  const handleStartFlow = () => {
+    if (!flowStartedRef.current) {
+      flowStartedRef.current = true;
+      trackGaEvent("quote_flow_started", quoteSignals());
+    }
+    quoteMutation.mutate();
+  };
 
   const handlePickLine = (line: (typeof lineTypes)[number]) => {
     setQuote({
@@ -1566,7 +1601,7 @@ export default function DesktopQuoteFlow() {
           setQuote={setQuote}
           selectedLine={selectedLine}
           onPickLine={handlePickLine}
-          onSubmit={() => quoteMutation.mutate()}
+          onSubmit={handleStartFlow}
           loading={quoteMutation.isPending}
           brokerName={brokerName}
         />
@@ -1585,7 +1620,17 @@ export default function DesktopQuoteFlow() {
         <SelectedStage
           selected={selected}
           selectedLine={selectedLine}
-          onContinue={() => goToStage("intake")}
+          onContinue={() => {
+            trackGaEvent("quote_selected", {
+              ...quoteSignals(),
+              carrier_name: selected?.carrierName,
+              product_name: selected?.productName,
+              product_type: selected?.productType,
+              monthly_premium: selected?.monthlyPremium,
+              annual_premium: selected?.annualPremium,
+            });
+            goToStage("intake");
+          }}
           onBack={() => goToStage("results")}
           brokerName={brokerName}
         />

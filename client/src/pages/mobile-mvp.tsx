@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { coverageTier, trackGaEvent } from "@/lib/ga";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -805,13 +806,33 @@ export default function MobileMvp() {
   const [assignment, setAssignment] = useState<AssignmentResponse | undefined>();
   const selectedLine = lineTypes.find((line) => line.id === quote.lineType) ?? lineTypes[0];
   const learnLine = lineTypes.find((line) => line.id === learnLineId) ?? selectedLine;
+  const flowStartedRef = useRef(false);
+
+  // Non-PII funnel signals shared across GA events for this consumer flow.
+  const quoteSignals = () => ({
+    flow: "mobile_quote",
+    line_type: quote.lineType,
+    state: quote.state,
+    coverage_amount: quote.faceAmount,
+    coverage_tier: coverageTier(quote.faceAmount),
+    smoker: quote.tobacco,
+    term_length: quote.termLength,
+  });
 
   const quoteMutation = useMutation({
-    mutationFn: async () => (await apiRequest("POST", "/api/quotes", quote)).json() as Promise<QuoteResponse>,
+    mutationFn: async () => {
+      trackGaEvent("quote_contact_submitted", quoteSignals());
+      return (await apiRequest("POST", "/api/quotes", quote)).json() as Promise<QuoteResponse>;
+    },
     onSuccess: (data) => {
       setQuoteResponse(data);
       setSelected(data.options[0]);
       setStep("results");
+      trackGaEvent("quotes_generated", {
+        ...quoteSignals(),
+        quotes_count: data.options.length,
+        recommended_carrier: data.summary.recommendedCarrier,
+      });
     },
   });
 
@@ -828,8 +849,23 @@ export default function MobileMvp() {
     onSuccess: (data) => {
       setAssignment(data);
       setStep("assigned");
+      trackGaEvent("lead_submitted_to_agent", {
+        ...quoteSignals(),
+        carrier_name: selected?.carrierName,
+        product_type: selected?.productType,
+        monthly_premium: selected?.monthlyPremium,
+        annual_premium: selected?.annualPremium,
+      });
     },
   });
+
+  const startQuoteFlow = () => {
+    if (!flowStartedRef.current) {
+      flowStartedRef.current = true;
+      trackGaEvent("quote_flow_started", quoteSignals());
+    }
+    quoteMutation.mutate();
+  };
 
   const back = () => {
     if (step === "quote" || step === "learn") {
@@ -863,7 +899,7 @@ export default function MobileMvp() {
           <QuoteBasics
             quote={quote}
             setQuote={setQuote}
-            onSubmit={() => quoteMutation.mutate()}
+            onSubmit={startQuoteFlow}
             loading={quoteMutation.isPending}
             line={selectedLine}
             onChangeLine={() => setStep("coverage")}
@@ -872,7 +908,17 @@ export default function MobileMvp() {
       case "results":
         return <Results response={quoteResponse} selected={selected} setSelected={setSelected} onContinue={() => setStep("selected")} line={selectedLine} />;
       case "selected":
-        return <SelectedQuote selected={selected} onContinue={() => setStep("intake")} line={selectedLine} />;
+        return <SelectedQuote selected={selected} onContinue={() => {
+          trackGaEvent("quote_selected", {
+            ...quoteSignals(),
+            carrier_name: selected?.carrierName,
+            product_name: selected?.productName,
+            product_type: selected?.productType,
+            monthly_premium: selected?.monthlyPremium,
+            annual_premium: selected?.annualPremium,
+          });
+          setStep("intake");
+        }} line={selectedLine} />;
       case "intake":
         return <Intake intake={intake} setIntake={setIntake} onContinue={() => setStep("disclosures")} />;
       case "disclosures":
