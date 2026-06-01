@@ -460,6 +460,7 @@ export default function AdminLandingPages() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="rounded-full">Internal MVP</Badge>
             <Button asChild variant="outline" className="rounded-full"><Link href="/admin">Routing console</Link></Button>
+            <Button asChild variant="outline" className="rounded-full"><Link href="/admin/captured-contacts">Captured contacts</Link></Button>
             <Button asChild variant="outline" className="rounded-full"><Link href="/agent">Agent portal</Link></Button>
             <Button asChild variant="outline" className="rounded-full"><Link href="/">Consumer app</Link></Button>
           </div>

@@ -383,6 +383,9 @@ export default function AdminConsole() {
             <Button asChild variant="outline" className="rounded-full" data-testid="button-open-landing-pages">
               <Link href="/admin/landing-pages">Landing pages</Link>
             </Button>
+            <Button asChild variant="outline" className="rounded-full" data-testid="button-open-captured-contacts">
+              <Link href="/admin/captured-contacts">Captured contacts</Link>
+            </Button>
             <Button asChild variant="outline" className="rounded-full" data-testid="button-open-agent-portal">
               <Link href="/agent">Agent portal</Link>
             </Button>

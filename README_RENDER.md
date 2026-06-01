@@ -168,6 +168,22 @@ Authentication behavior:
 - **Secret missing in production** → `503` (fail closed).
 - **Secret missing in non-production** → allowed with a warning (local dev convenience only).
 
+#### Captured contacts admin page (UI)
+
+Instead of using curl/Postman, admins can view captured contacts in the browser at:
+
+```text
+https://www.policyquoters.com/admin/captured-contacts
+```
+
+This page is reachable from the **Captured contacts** button in the headers of the routing console (`/admin`) and the landing-page builder (`/admin/landing-pages`). It works as follows:
+
+- You **paste the admin API secret** into a password field on the page. The page sends it as the `X-PolicyQuoters-Admin-Secret` header when calling `GET /api/admin/visitor-capture-events`.
+- The secret is held **in React state for the current session only**. It is **never** written to `localStorage`, `sessionStorage`, cookies, or the URL, and is cleared when you reload or leave the page. You must re-enter it each session.
+- The API still requires the header, so **navigating directly to the API URL in a browser remains blocked** (`401`). The UI simply supplies the header on your behalf after you enter the secret.
+- Features: client-side search/filter (email, name, source, page URL), a limit selector (25/50/100/250) that re-passes the `limit` query param, CSV export of the currently filtered rows (the export **excludes the secret** and only includes contact/attribution columns), and a detail drawer showing the **raw GE payload** for each event (GE field names can vary).
+- Friendly **loading, empty, unauthorized, and error** states are included. On a `401`, the page tells you to verify the entered secret matches the server's `POLICYQUOTERS_ADMIN_API_SECRET`.
+
 > Note: other `/api/admin/*` routes in this prototype (e.g. `/api/admin/leads`, consumed by the admin landing-pages UI) remain on the existing open-access pattern and are **not** gated by this secret, since the in-app admin UI does not yet send the header. Gate those behind real auth before exposing them broadly.
 
 Security notes:
