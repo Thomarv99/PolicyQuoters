@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import type { Server } from "node:http";
 import {
   adminAssignAgentSchema,
@@ -816,6 +816,35 @@ function buildVisitorCaptureInput(
   };
 }
 
+// Guards admin endpoints that expose visitor/contact PII. The caller must send
+// the X-PolicyQuoters-Admin-Secret header matching POLICYQUOTERS_ADMIN_API_SECRET.
+// Fails closed in production when the secret is unset so we never serve contact
+// data unauthenticated. Never logs the expected or provided secret.
+const requireAdminSecret: RequestHandler = (req, res, next) => {
+  const expectedSecret = process.env.POLICYQUOTERS_ADMIN_API_SECRET?.trim();
+  const providedSecret = req.header("x-policyquoters-admin-secret");
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (expectedSecret && expectedSecret.length > 0) {
+    if (providedSecret !== expectedSecret) {
+      return res.status(401).json({ ok: false, message: "Invalid or missing admin secret." });
+    }
+    return next();
+  }
+
+  if (isProduction) {
+    console.error(
+      "[admin] POLICYQUOTERS_ADMIN_API_SECRET is not set in production. Rejecting request to avoid exposing contact data.",
+    );
+    return res.status(503).json({ ok: false, message: "Admin endpoint is not configured." });
+  }
+
+  console.warn(
+    "[admin] POLICYQUOTERS_ADMIN_API_SECRET is not set. Allowing request without authentication (non-production only).",
+  );
+  return next();
+};
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await hydrateAgentState();
 
@@ -873,7 +902,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/admin/visitor-capture-events", async (req, res, next) => {
+  app.get("/api/admin/visitor-capture-events", requireAdminSecret, async (req, res, next) => {
     try {
       const limitParam = Number.parseInt(String(req.query.limit ?? "100"), 10);
       const limit = Number.isFinite(limitParam) ? limitParam : 100;

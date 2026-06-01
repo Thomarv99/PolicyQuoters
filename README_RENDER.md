@@ -134,11 +134,46 @@ View recent captured events (newest first) at:
 GET https://www.policyquoters.com/api/admin/visitor-capture-events?limit=100
 ```
 
-This admin read endpoint follows the same open-access pattern as the other `/api/admin/*` routes in this prototype; gate it behind real auth before exposing it broadly.
+Because this endpoint returns enriched contact data (email, name, phone, IP, etc.), it is **protected by an admin secret**. It is **not** publicly accessible: visiting the URL directly in a browser now returns `401 Unauthorized` because a browser cannot attach the required header. You must use a tool/client (curl, Postman, a script) that sends the `X-PolicyQuoters-Admin-Secret` header.
+
+Set the admin secret in Render → **Environment**:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `POLICYQUOTERS_ADMIN_API_SECRET` | Yes (for production) | A long random string you generate (e.g. `openssl rand -hex 32`). Keep it **different** from `GETEMAILS_WEBHOOK_SECRET`. The admin read endpoint only accepts requests whose `X-PolicyQuoters-Admin-Secret` header **exactly matches** this value. In production, if this var is **missing**, the endpoint fails closed and returns `503` so contact data is never served unauthenticated. In local/dev (non-production), a missing secret logs a warning and allows the request. The secret is **never logged**. |
+
+Render environment value to add:
+
+```text
+POLICYQUOTERS_ADMIN_API_SECRET=YOUR_RANDOM_ADMIN_SECRET
+```
+
+To view events, send the matching header (shown as a JSON header object):
+
+```json
+{ "X-PolicyQuoters-Admin-Secret": "YOUR_RANDOM_ADMIN_SECRET" }
+```
+
+Example request:
+
+```bash
+curl -H "X-PolicyQuoters-Admin-Secret: YOUR_RANDOM_ADMIN_SECRET" \
+  "https://www.policyquoters.com/api/admin/visitor-capture-events?limit=100"
+```
+
+Authentication behavior:
+
+- **Secret set + header matches** → `200` with the events JSON.
+- **Secret set + header missing/wrong** → `401`.
+- **Secret missing in production** → `503` (fail closed).
+- **Secret missing in non-production** → allowed with a warning (local dev convenience only).
+
+> Note: other `/api/admin/*` routes in this prototype (e.g. `/api/admin/leads`, consumed by the admin landing-pages UI) remain on the existing open-access pattern and are **not** gated by this secret, since the in-app admin UI does not yet send the header. Gate those behind real auth before exposing them broadly.
 
 Security notes:
 
 - Generate a unique random value for `GETEMAILS_WEBHOOK_SECRET`. **Do not paste the real secret into GitHub** (README, `render.yaml`, or code) — set it only in the Render dashboard and in the GetEmails Custom Headers field. The values shown above are placeholders.
+- Generate a **separate** unique random value for `POLICYQUOTERS_ADMIN_API_SECRET` (do not reuse `GETEMAILS_WEBHOOK_SECRET`). Set it only in the Render dashboard, never in committed files. The values shown above are placeholders.
 - Because this endpoint receives and stores enriched visitor contact details, keep the **Privacy Policy** (`/privacy-policy`) aligned with what is collected, stored, and shared.
 
 ## 3. Add the custom domain
