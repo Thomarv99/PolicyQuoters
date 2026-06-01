@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Download, KeyRound, Loader2, RefreshCw, Search, ShieldAlert, Users, X } from "lucide-react";
+import { AlertTriangle, Download, KeyRound, Loader2, RefreshCw, Search, ShieldAlert, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,12 +39,23 @@ type CapturedContact = {
   enrichmentPayload?: unknown;
 };
 
+type StorageStatus = {
+  backend: "database" | "memory";
+  databaseUrlConfigured: boolean;
+  databaseInitialized: boolean;
+  databaseInitFailed: boolean;
+  persistenceDegraded: boolean;
+  memoryEventCount: number;
+};
+
+type EventsResponse = { events: CapturedContact[]; storage?: StorageStatus };
+
 type FetchState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "unauthorized" }
   | { status: "error"; message: string }
-  | { status: "loaded"; events: CapturedContact[] };
+  | { status: "loaded"; events: CapturedContact[]; storage?: StorageStatus };
 
 const LIMIT_OPTIONS = [25, 50, 100, 250] as const;
 
@@ -188,17 +199,34 @@ export default function AdminCapturedContacts() {
           headers: { "X-PolicyQuoters-Admin-Secret": secret.trim() },
         },
       );
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         setState({ status: "unauthorized" });
+        return;
+      }
+      if (res.status === 503) {
+        setState({
+          status: "error",
+          message:
+            "The admin endpoint is not configured on the server. Set the POLICYQUOTERS_ADMIN_API_SECRET environment variable, then redeploy.",
+        });
         return;
       }
       if (!res.ok) {
         const text = (await res.text()) || res.statusText;
-        setState({ status: "error", message: `${res.status}: ${text}` });
+        setState({
+          status: "error",
+          message: `Server returned ${res.status}. ${text}`.trim(),
+        });
         return;
       }
-      const events = (await res.json()) as CapturedContact[];
-      setState({ status: "loaded", events });
+      // The endpoint returns { events, storage }. Tolerate a bare array too, in
+      // case an older server build is deployed, so the page still renders.
+      const body = (await res.json()) as EventsResponse | CapturedContact[];
+      if (Array.isArray(body)) {
+        setState({ status: "loaded", events: body });
+      } else {
+        setState({ status: "loaded", events: body.events ?? [], storage: body.storage });
+      }
     } catch (error) {
       setState({
         status: "error",
@@ -234,6 +262,7 @@ export default function AdminCapturedContacts() {
   }
 
   const events = state.status === "loaded" ? state.events : [];
+  const storage = state.status === "loaded" ? state.storage : undefined;
 
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -356,6 +385,29 @@ export default function AdminCapturedContacts() {
           </section>
         ) : null}
 
+        {state.status === "loaded" && storage?.persistenceDegraded ? (
+          <Card className="mb-4 border-amber-500/50 bg-amber-500/10">
+            <CardContent className="flex items-start gap-3 p-6 text-sm">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-700">Captured contacts are not being saved</p>
+                <p className="text-muted-foreground">
+                  The server is using volatile in-memory storage, so captures are lost on every
+                  redeploy or restart and this list will look empty even when GetEmails is delivering
+                  contacts. This happens when{" "}
+                  <code className="mx-1">DATABASE_URL</code>
+                  is missing or the database could not be reached
+                  {storage.databaseUrlConfigured
+                    ? " (DATABASE_URL is set but the connection or schema setup failed)"
+                    : " (DATABASE_URL is not set)"}
+                  . Verify the Supabase/Postgres connection string in your Render environment and
+                  redeploy.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {state.status === "idle" ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
@@ -406,7 +458,13 @@ export default function AdminCapturedContacts() {
             <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
               <Users className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                {events.length === 0 ? "No captured contacts yet." : "No contacts match your filter."}
+                {events.length > 0
+                  ? "No contacts match your filter."
+                  : storage?.persistenceDegraded
+                    ? "No captured contacts in memory. See the storage warning above — contacts are not being persisted."
+                    : storage?.backend === "database"
+                      ? "No captured contacts yet. The database is connected; new GetEmails captures will appear here."
+                      : "No captured contacts yet."}
               </p>
             </CardContent>
           </Card>

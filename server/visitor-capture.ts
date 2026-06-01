@@ -2,7 +2,7 @@
 // webhook. When DATABASE_URL is set, reads/writes go to Postgres (Supabase);
 // otherwise an in-process in-memory store is used so local/dev runs work
 // without a database. See README_RENDER.md.
-import { hasDatabaseUrl, isDatabaseInitialized, query } from "./db";
+import { databaseInitFailed, hasDatabaseUrl, isDatabaseInitialized, query } from "./db";
 
 function nowIso() {
   return new Date().toISOString();
@@ -48,6 +48,39 @@ const memEvents = new Map<string, VisitorCaptureEvent>();
 
 function useDb(): boolean {
   return hasDatabaseUrl() && isDatabaseInitialized();
+}
+
+export type VisitorCaptureStorageStatus = {
+  // "database" when reads/writes hit Postgres; "memory" when using the volatile
+  // in-process store (data is lost on every redeploy/restart).
+  backend: "database" | "memory";
+  databaseUrlConfigured: boolean;
+  databaseInitialized: boolean;
+  databaseInitFailed: boolean;
+  // True when production is silently running on in-memory storage. The admin UI
+  // surfaces this so an empty list isn't mistaken for "no captures yet".
+  persistenceDegraded: boolean;
+  memoryEventCount: number;
+};
+
+// Reports how captured visitor events are being stored. Contains no secrets or
+// connection strings — only booleans/counts safe to show in the admin UI.
+export function getVisitorCaptureStorageStatus(): VisitorCaptureStorageStatus {
+  const databaseUrlConfigured = hasDatabaseUrl();
+  const databaseInitialized = isDatabaseInitialized();
+  const initFailed = databaseInitFailed();
+  const onDatabase = databaseUrlConfigured && databaseInitialized;
+  const isProduction = process.env.NODE_ENV === "production";
+  return {
+    backend: onDatabase ? "database" : "memory",
+    databaseUrlConfigured,
+    databaseInitialized,
+    databaseInitFailed: initFailed,
+    // Degraded only matters in production: a missing/broken DB there means
+    // captures are being dropped on restart, which is the bug we surface.
+    persistenceDegraded: isProduction && !onDatabase,
+    memoryEventCount: memEvents.size,
+  };
 }
 
 function rowToEvent(row: Record<string, unknown>): VisitorCaptureEvent {

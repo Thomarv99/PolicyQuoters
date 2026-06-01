@@ -187,6 +187,13 @@ export function isDatabaseInitialized(): boolean {
   return initialized;
 }
 
+// True when DATABASE_URL was set but pool creation or schema init failed, so the
+// app has fallen back to in-memory storage. Used by admin diagnostics to warn
+// that captured data is not being persisted.
+export function databaseInitFailed(): boolean {
+  return initFailed;
+}
+
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],

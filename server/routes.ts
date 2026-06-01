@@ -44,6 +44,7 @@ import { buildMockQuotes, fetchHexureQuotes, filterQuotesByLandingPage } from ".
 import { ensureDatabaseReady, hasDatabaseUrl } from "./db";
 import {
   getVisitorCaptureEvent,
+  getVisitorCaptureStorageStatus,
   listVisitorCaptureEvents,
   recordVisitorCaptureEvent,
   updateVisitorCaptureEnrichment,
@@ -997,7 +998,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const limitParam = Number.parseInt(String(req.query.limit ?? "100"), 10);
       const limit = Number.isFinite(limitParam) ? limitParam : 100;
       const events = await listVisitorCaptureEvents(limit);
-      return res.json(events);
+      // Wrap the list with storage diagnostics so the admin UI can distinguish
+      // "no captures yet" from "running on volatile in-memory storage because
+      // the database is unavailable" — the latter silently loses data on every
+      // redeploy. storage contains no secrets/connection strings.
+      return res.json({ events, storage: getVisitorCaptureStorageStatus() });
     } catch (error) {
       return next(error);
     }

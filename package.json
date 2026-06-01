@@ -10,6 +10,7 @@
     "check": "tsc",
     "test:versium": "tsx script/versium.smoke.ts",
     "test:landing": "tsx script/landing-active.test.ts",
+    "test:capture": "tsx script/visitor-capture-storage.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
