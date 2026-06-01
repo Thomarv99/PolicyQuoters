@@ -257,7 +257,9 @@ export const landingPageSchema = z.object({
   licensedCarriers: z.array(z.string().min(2)).min(1),
   headline: z.string().optional(),
   subheadline: z.string().optional(),
-  active: z.boolean(),
+  // Default to active so an omitted flag never silently parks a new page.
+  // Matches the DB column default and the admin form default.
+  active: z.boolean().default(true),
   metaPixelId: z
     .string()
     .regex(/^\d{6,20}$/, "Meta Pixel ID must be 6-20 digits")

@@ -850,15 +850,30 @@ export default function AdminLandingPages() {
                   </div>
                 </Field>
 
-                <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
-                    checked={form.active}
-                    onChange={(event) => setField("active", event.target.checked)}
-                    data-testid="checkbox-lp-active"
-                  />
-                  <span>Page is active and accepting consumer traffic</span>
+                <label
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-2xl border p-3 text-sm transition",
+                    form.active ? "border-primary bg-primary/5" : "border-border bg-card",
+                  )}
+                >
+                  <span className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                      checked={form.active}
+                      onChange={(event) => setField("active", event.target.checked)}
+                      data-testid="checkbox-lp-active"
+                    />
+                    <span>
+                      <span className="block font-medium text-foreground">Page is active</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Active pages accept consumer traffic at /lp/{form.slug || "<slug>"}. Uncheck to keep it paused.
+                      </span>
+                    </span>
+                  </span>
+                  <Badge variant={form.active ? "default" : "secondary"} className="rounded-full" data-testid="badge-lp-active-state">
+                    {form.active ? "Active" : "Paused"}
+                  </Badge>
                 </label>
 
                 {error ? <p className="text-sm text-destructive" data-testid="text-lp-error">{error}</p> : null}
