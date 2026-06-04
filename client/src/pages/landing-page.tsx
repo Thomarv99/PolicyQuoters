@@ -23,7 +23,6 @@ import type {
 } from "@shared/schema";
 
 type Step =
-  | "intro"
   | "age"
   | "gender"
   | "state"
@@ -37,7 +36,7 @@ type Step =
 type Answers = Partial<LandingQuoteAnswers>;
 type Contact = Partial<Omit<LandingContact, "consent">> & { consent?: boolean };
 
-const stepOrder: Step[] = ["intro", "age", "gender", "state", "coverage", "smoker", "health", "contact", "results", "thanks"];
+const stepOrder: Step[] = ["age", "gender", "state", "coverage", "smoker", "health", "contact", "results", "thanks"];
 
 const coverageChoices = [100_000, 250_000, 500_000, 750_000, 1_000_000, 1_500_000];
 const ageBuckets: Array<{ label: string; value: number }> = [
@@ -278,7 +277,7 @@ export default function LandingPageView() {
   const [, params] = useRoute<{ slug: string }>("/lp/:slug");
   const slug = params?.slug ?? "";
 
-  const [step, setStep] = useState<Step>("intro");
+  const [step, setStep] = useState<Step>("age");
   const [answers, setAnswers] = useState<Answers>({});
   const [contact, setContact] = useState<Contact>({});
   const [response, setResponse] = useState<LandingQuoteResponse | undefined>();
@@ -338,25 +337,23 @@ export default function LandingPageView() {
 
   const allowedStates = useMemo(() => landingPage?.licensedStates ?? [], [landingPage]);
 
-  const handleStartFlow = () => {
-    if (!quoteStartedSentRef.current && landingPage) {
-      quoteStartedSentRef.current = true;
-      trackCustomEvent(
-        "QuoteStarted",
-        {
-          landing_page_slug: landingPage.slug,
-          landing_page_id: landingPage.id,
-          product_type: "life_insurance",
-        },
-        { pixelId: pagePixelId, eventId: newEventId("qs") },
-      );
-      trackGaEvent("quote_flow_started", {
+  const trackQuoteStarted = () => {
+    if (quoteStartedSentRef.current || !landingPage) return;
+    quoteStartedSentRef.current = true;
+    trackCustomEvent(
+      "QuoteStarted",
+      {
         landing_page_slug: landingPage.slug,
         landing_page_id: landingPage.id,
         product_type: "life_insurance",
-      });
-    }
-    setStep("age");
+      },
+      { pixelId: pagePixelId, eventId: newEventId("qs") },
+    );
+    trackGaEvent("quote_flow_started", {
+      landing_page_slug: landingPage.slug,
+      landing_page_id: landingPage.id,
+      product_type: "life_insurance",
+    });
   };
 
   const quoteMutation = useMutation({
@@ -545,21 +542,16 @@ export default function LandingPageView() {
       </header>
 
       <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <div className="mb-6 rounded-3xl border border-border bg-card/95 p-5 sm:p-6">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-primary">
-            <BadgeCheck className="h-4 w-4" />
-            Licensed agent
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-            {landingPage.headline || "Compare life insurance quotes in under a minute"}
+        <div className="mb-6 rounded-3xl border border-border bg-card/95 p-5 text-center sm:p-7" data-testid="landing-header">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-4xl" data-testid="landing-header-title">
+            Compare Life Insurance Quotes
           </h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
-            {landingPage.subheadline ||
-              `Answer a few quick questions and ${landingPage.agent.displayName} will share quotes from carriers they are appointed with.`}
+          <p className="mx-auto mt-3 flex items-center justify-center gap-2 text-base font-medium text-foreground sm:text-lg" data-testid="landing-header-subtitle">
+            <BadgeCheck className="h-5 w-5 shrink-0 text-primary" />
+            Get quotes from up to 50+ A Rated Carriers
           </p>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Working with <span className="font-medium text-foreground">{landingPage.agent.displayName}</span>
-            {landingPage.agent.title ? ` · ${landingPage.agent.title}` : null}
+          <p className="mt-2 text-sm font-medium uppercase tracking-[0.18em] text-primary" data-testid="landing-header-instruction">
+            Answer the questions below
           </p>
         </div>
 
@@ -569,15 +561,8 @@ export default function LandingPageView() {
           </div>
         ) : null}
 
-        {step === "intro" && (
-          <QuestionFrame step="intro" title="Get your personalized quotes" subtitle="Takes about a minute. No spam. No selling your info to ad networks.">
-            <Button size="lg" className="w-full rounded-full" data-testid="button-start-flow" onClick={handleStartFlow}>Start my quotes</Button>
-            <p className="text-center text-xs text-muted-foreground">By continuing you agree to our quote process.</p>
-          </QuestionFrame>
-        )}
-
         {step === "age" && (
-          <QuestionFrame step="age" title="What is your age range?" subtitle="We use this to estimate pricing. You can refine later." onBack={goBack("intro")}>
+          <QuestionFrame step="age" title="What is your age range?" subtitle="We use this to estimate pricing. You can refine later.">
             {ageBuckets.map((bucket) => (
               <ChoiceCard
                 key={bucket.label}
@@ -585,6 +570,7 @@ export default function LandingPageView() {
                 description="Age range"
                 selected={answers.ageRange === bucket.label}
                 onClick={() => {
+                  trackQuoteStarted();
                   setAnswers((prev) => ({ ...prev, ageRange: bucket.label, age: bucket.value }));
                   setStep("gender");
                 }}

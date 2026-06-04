@@ -45,6 +45,8 @@ async function run() {
   assert("slug reload keeps active=true", bySlug?.active === true);
   // The public /lp/:slug + /api/landing-pages/:slug routes 404 unless page.active.
   assert("active page is publicly servable", Boolean(bySlug && bySlug.active));
+  // Slug format must remain stable so existing public links (e.g. /lp/jh-life) keep resolving.
+  assert("slug stored verbatim for /lp/:slug links", bySlug?.slug === "active-page");
 
   // 2. Explicit inactive stays inactive.
   const inactive = await createLandingPage(
