@@ -180,6 +180,10 @@ function TextField({
   placeholder,
   type = "text",
   testId,
+  name,
+  id,
+  autoComplete,
+  inputMode,
 }: {
   label: string;
   value: string;
@@ -187,15 +191,23 @@ function TextField({
   placeholder?: string;
   type?: string;
   testId: string;
+  name?: string;
+  id?: string;
+  autoComplete?: string;
+  inputMode?: "text" | "email" | "tel" | "numeric" | "decimal" | "search" | "url" | "none";
 }) {
   return (
-    <label className="block space-y-2">
+    <label htmlFor={id} className="block space-y-2">
       <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
+        name={name}
+        id={id}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
         data-testid={testId}
         className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
@@ -681,12 +693,12 @@ export default function LandingPageView() {
         {step === "contact" && (
           <QuestionFrame step="contact" title="Where should we send your quotes?" subtitle="We only share these details with your assigned licensed agent." onBack={goBack("health")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="First name" value={contact.firstName ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, firstName: value }))} placeholder="Jordan" testId="input-contact-first-name" />
-              <TextField label="Last name" value={contact.lastName ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, lastName: value }))} placeholder="Riley" testId="input-contact-last-name" />
+              <TextField label="First name" name="given-name" id="contact-first-name" autoComplete="given-name" value={contact.firstName ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, firstName: value }))} placeholder="Jordan" testId="input-contact-first-name" />
+              <TextField label="Last name" name="family-name" id="contact-last-name" autoComplete="family-name" value={contact.lastName ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, lastName: value }))} placeholder="Riley" testId="input-contact-last-name" />
             </div>
-            <TextField label="Email" type="email" value={contact.email ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, email: value }))} placeholder="you@email.com" testId="input-contact-email" />
-            <TextField label="Mobile phone" type="tel" value={contact.phone ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, phone: value }))} placeholder="(212) 555-0100" testId="input-contact-phone" />
-            <TextField label="ZIP code (optional)" value={contact.zip ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, zip: value }))} placeholder="10013" testId="input-contact-zip" />
+            <TextField label="Email" type="email" name="email" id="contact-email" autoComplete="email" inputMode="email" value={contact.email ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, email: value }))} placeholder="you@email.com" testId="input-contact-email" />
+            <TextField label="Mobile phone" type="tel" name="phone" id="contact-phone" autoComplete="tel" inputMode="tel" value={contact.phone ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, phone: value }))} placeholder="(212) 555-0100" testId="input-contact-phone" />
+            <TextField label="ZIP code (optional)" name="postal-code" id="contact-zip" autoComplete="postal-code" inputMode="numeric" value={contact.zip ?? ""} onChange={(value) => setContact((prev) => ({ ...prev, zip: value }))} placeholder="10013" testId="input-contact-zip" />
             <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-3 text-sm">
               <input
                 type="checkbox"

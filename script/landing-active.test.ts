@@ -3,6 +3,9 @@
 // shared Zod schema's defaulting behavior. Exits non-zero on the first failure.
 //
 // Run with: npm run test:landing
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { landingPageSchema } from "../shared/schema";
 import {
   createLandingPage,
@@ -61,6 +64,25 @@ async function run() {
   assert("schema defaults omitted active to true", parsedDefault.active === true);
   const defaulted = await createLandingPage(parsedDefault);
   assert("page created without explicit active is active", defaulted.active === true);
+
+  // 4. Public contact form keeps browser/OS autofill hints so saved profiles fill in.
+  const landingSource = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../client/src/pages/landing-page.tsx"),
+    "utf8",
+  );
+  for (const hint of [
+    'autoComplete="given-name"',
+    'autoComplete="family-name"',
+    'autoComplete="email"',
+    'autoComplete="tel"',
+    'autoComplete="postal-code"',
+  ]) {
+    assert(`landing contact form includes ${hint}`, landingSource.includes(hint));
+  }
+  assert(
+    "TextField forwards autoComplete to the native input",
+    /<input[\s\S]*?autoComplete=\{autoComplete\}/.test(landingSource),
+  );
 
   if (failures > 0) {
     console.error(`\n${failures} assertion(s) failed.`);
